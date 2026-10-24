@@ -43,10 +43,12 @@ npx tsc --noEmit    # Typprüfung Backend
 npm run check       # Svelte-/TypeScript-Prüfung
 npm run build       # Frontend nach dist/
 DB_PATH=./data/dev.db PORT=8099 npm start
+npm run dev:web     # Vite-Dev-Server auf :5173, /api geht per Proxy an :8099
 ```
 
 Ohne Home Assistant fehlt der Nutzer-Header: API-Aufrufe brauchen dann `X-Remote-User-Id` (z. B.
-`curl -H 'X-Remote-User-Id: dev' localhost:8099/api/sessions`). Lokal ist die Ingress-Sperre aus, solange
+`curl -H 'X-Remote-User-Id: dev' localhost:8099/api/sessions`). Der Vite-Dev-Server setzt ihn im Proxy selbst (Nutzer
+`dev`), die Oberfläche läuft lokal also unter <http://localhost:5173>. Lokal ist die Ingress-Sperre aus, solange
 `INGRESS_ONLY_IP` nicht gesetzt ist. Architektur, Regeln und bewusste Entscheidungen stehen in [`AGENTS.md`](AGENTS.md).
 
 Änderungen kommen mit Conventional-Commit-Präfix (`feat:`, `fix:`, `perf:`) über Pull Requests auf `main`.

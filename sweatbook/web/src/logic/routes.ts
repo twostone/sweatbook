@@ -2,6 +2,7 @@
 
 export type Route =
   | { name: "start" }
+  | { name: "history" }
   | { name: "session"; sessionId: string }
   | { name: "block"; sessionId: string; blockId: string }
   | { name: "catalog" }
@@ -11,6 +12,7 @@ export type Route =
 
 export const paths = {
   start: () => "#/",
+  history: () => "#/history",
   session: (sessionId: string) => `#/s/${sessionId}`,
   block: (sessionId: string, blockId: string) => `#/s/${sessionId}/b/${blockId}`,
   catalog: () => "#/exercises",
@@ -26,6 +28,7 @@ export function parseRoute(hash: string): Route {
     if (parts[2] === "b" && parts[3]) return { name: "block", sessionId: parts[1], blockId: parts[3] };
     return { name: "session", sessionId: parts[1] };
   }
+  if (parts[0] === "history") return { name: "history" };
   if (parts[0] === "exercises") {
     if (parts[1] === "new") {
       const params = new URLSearchParams(query);

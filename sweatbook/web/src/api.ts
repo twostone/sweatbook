@@ -87,7 +87,9 @@ export const exerciseHistory = (id: string, before: string | undefined, limit: n
     `api/exercises/${enc(id)}/history?${new URLSearchParams({ limit: String(limit), ...(before ? { before } : {}) })}`,
   );
 
-export const listSessions = (limit = 20) => request<SessionSummary[]>("GET", `api/sessions?limit=${limit}`);
+// Newest first; `before` (a started_at) pages further back.
+export const listSessions = (limit: number, before?: string) =>
+  request<SessionSummary[]>("GET", `api/sessions?${new URLSearchParams({ limit: String(limit), ...(before ? { before } : {}) })}`);
 export const createSession = (s: { title?: string | null; started_at?: string } = {}) =>
   request<SessionTree>("POST", "api/sessions", s);
 export const getSession = (id: string) => request<SessionTree>("GET", `api/sessions/${enc(id)}`);

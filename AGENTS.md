@@ -140,7 +140,8 @@ Actions to create and approve pull requests“.
 ## Regeln beim Ändern
 
 - **Frontend-URLs immer relativ** (`api/sessions`), nie `/api/...`: Die App läuft unter einem wechselnden Ingress-Präfix.
-- **Navigation:** Seiten über Hash-Routen (`#/s/<id>/b/<id>`), Sheets belegen einen History-Eintrag ohne URL-Änderung
+- **Navigation:** Seiten über Hash-Routen (alle in `web/src/logic/routes.ts`: Start, `#/history`, `#/s/<id>`,
+  `#/s/<id>/b/<id>`, `#/exercises`, `#/exercises/new`, `#/exercises/<id>`), Sheets belegen einen History-Eintrag ohne URL-Änderung
   und stehen in `history.state` (Zurück schließt sie, „Übung anlegen“ kehrt in das Sheet zurück). Geschwister (nächster
   Block) per `replace`, „nach oben“ per `goUp`, damit die Zurück-Taste nicht im Kreis läuft.
 - **Funkloch:** Ungesendete Satzzeilen liegen in `localStorage` (`drafts.ts`, `storage.ts`, jeder Zugriff in try/catch),
@@ -161,9 +162,10 @@ Actions to create and approve pull requests“.
 
 ## Stand und offene Punkte
 
-- Phase 1: Backend fertig und getestet. Oberfläche: Session-Ablauf (Start minimal, Übersicht, Übung, Supersatz, Sheet
-  „Übung hinzufügen“) und Übungskatalog (Liste, Anlegen mit Aliasen und Ähnlichkeits-Hinweis, Detail mit Archivieren,
-  Löschen und Satzhistorie) stehen; Start komplett und Verlauf folgen. Mockups und Konzept liegen
+- Phase 1 ist gebaut: Backend und Oberfläche (Start mit Nachtragen, Verlauf, Session-Übersicht, Übung, Supersatz, Sheet
+  „Übung hinzufügen“, Übungskatalog mit Anlegen und Detail).
+- Nachgetragene Sessions werden sofort beendet (`ended_at` = Beginn, der einzige bekannte Zeitpunkt). Eine laufende
+  Session endet beim Nachtragen (Regel „nur eine offene Session“); das Sheet warnt davor. Mockups und Konzept liegen
   außerhalb des Repos.
 - Nicht am echten System geprüft: Ingress-Header, Start in Home Assistant, ob die Companion-App `prefers-color-scheme`
   an die eingebettete Seite weitergibt.

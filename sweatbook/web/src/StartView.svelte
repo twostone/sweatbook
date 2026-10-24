@@ -1,16 +1,18 @@
 <script lang="ts">
   import Icon from "./Icon.svelte";
+  import SessionRow from "./SessionRow.svelte";
   import { formatSessionDate } from "./logic/format";
   import { navigate, paths } from "./router.svelte";
-  import { app, refreshSessions, startSession } from "./store.svelte";
+  import { app, openSheet, refreshSessions, startSession } from "./store.svelte";
 
-  // Start: carry on with the open session or start a new one, and the latest sessions.
+  // Start: carry on with the open session, start a new one or enter a past one, the latest sessions, and the way to
+  // the history and the catalog.
   $effect(() => {
     refreshSessions();
   });
 
   const open = $derived(app.sessions.find((s) => s.ended_at === null));
-  const recent = $derived(app.sessions.filter((s) => s !== open).slice(0, 10));
+  const recent = $derived(app.sessions.filter((s) => s !== open));
   let busy = $state(false);
 
   async function start() {
@@ -46,31 +48,21 @@
     {/if}
 
     {#if recent.length}
-      <h2 class="label section">Zuletzt</h2>
+      <div class="section">
+        <h2 class="label">Zuletzt</h2>
+        <button type="button" class="link-btn" onclick={() => navigate(paths.history())}>Alle Sessions</button>
+      </div>
       {#each recent as s (s.id)}
-        <a
-          class="card past"
-          href={paths.session(s.id)}
-          onclick={(e) => {
-            e.preventDefault();
-            navigate(paths.session(s.id));
-          }}
-        >
-          <span class="body">
-            <span class="label">{formatSessionDate(s.started_at)}</span>
-            <span class="name small">{s.title ?? "Training"}</span>
-          </span>
-          <span class="muted count">{s.set_count} Sätze</span>
-          <Icon name="chevron" size={20} />
-        </a>
+        <SessionRow session={s} />
       {/each}
     {:else if !open}
       <p class="empty">Noch keine Sessions.</p>
     {/if}
+    <button type="button" class="link-btn log" onclick={() => openSheet({ kind: "log-session" })}>Training nachtragen</button>
   </main>
 
   <footer>
-    <button type="button" class="btn big square" aria-label="Übungskatalog" onclick={() => navigate(paths.catalog())}><Icon name="list" /></button>
+    <button type="button" class="btn big" onclick={() => navigate(paths.catalog())}><Icon name="list" />Katalog</button>
     <button type="button" class="btn big grow" class:primary={!open} disabled={busy} onclick={start}>
       <Icon name="plus" />Neue Session
     </button>
@@ -90,11 +82,6 @@
   .grow {
     flex: 1;
   }
-  .square {
-    width: 60px;
-    padding: 0;
-    flex: none;
-  }
   .live {
     display: flex;
     align-items: center;
@@ -102,18 +89,6 @@
     background: var(--accent-soft);
     outline: 2px solid var(--accent-ink);
     outline-offset: -2px;
-  }
-  .past {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    min-height: 64px;
-    padding: 10px 10px 10px 14px;
-    color: var(--ink);
-  }
-  .past :global(svg) {
-    color: var(--muted);
-    flex: none;
   }
   .body {
     flex: 1;
@@ -134,9 +109,6 @@
     text-transform: uppercase;
     overflow-wrap: anywhere;
   }
-  .name.small {
-    font-size: 20px;
-  }
   .go {
     display: flex;
     align-items: center;
@@ -145,8 +117,15 @@
   }
   .section {
     margin: 12px 4px 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
   }
-  .count {
-    font-size: 14px;
+  .section h2 {
+    margin: 0;
+  }
+  .log {
+    align-self: center;
+    color: var(--muted);
   }
 </style>

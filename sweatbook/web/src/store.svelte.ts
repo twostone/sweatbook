@@ -11,7 +11,8 @@ export type SheetState =
   | { kind: "none" }
   | { kind: "add-exercise"; target: AddTarget; query: string }
   | { kind: "session"; sessionId: string }
-  | { kind: "block-menu"; sessionId: string; blockId: string };
+  | { kind: "block-menu"; sessionId: string; blockId: string }
+  | { kind: "log-session" };
 
 export const app = $state({
   ready: false,
@@ -65,9 +66,12 @@ export async function init() {
   app.ready = true;
 }
 
+// The start page shows the open session and the latest few; the history page loads its own pages.
+const START_SESSIONS = 6;
+
 export const refreshSessions = () =>
   guard(async () => {
-    app.sessions = await api.listSessions();
+    app.sessions = await api.listSessions(START_SESSIONS);
   });
 
 // The stored copy stands in when the server cannot be reached (dead spot in the gym), so the page still shows.
@@ -95,6 +99,16 @@ export const startSession = () =>
     const tree = await api.createSession();
     setSession(tree);
     navigate(paths.session(tree.id));
+  });
+
+// A past training entered afterwards: it starts at the given time and is ended right away (at its start, the only time
+// known), so it neither shows as running nor ends at "now" when "Fertig" is tapped. It stays fully editable.
+// Creating it ends an open session (server rule: one open session).
+export const logPastSession = (startedAt: string, title: string) =>
+  guard(async () => {
+    const created = await api.createSession({ started_at: startedAt, title: title.trim() || null });
+    setSession(await api.updateSession(created.id, { ended_at: startedAt }));
+    closeSheetThen(() => navigate(paths.session(created.id)));
   });
 
 // Ends the session now (only if it is still open) and goes to the start.

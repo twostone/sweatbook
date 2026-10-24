@@ -1,6 +1,6 @@
 import { isoNow, transaction, type Db } from "../db.ts";
 import { InvalidError, newId, NotFoundError } from "./common.ts";
-import { getExercise, type Metrics } from "./exercises.ts";
+import { getExercise, type Field } from "./exercises.ts";
 import { SET_COLUMNS, toSet, type SetLog } from "./sets.ts";
 
 export type SessionSummary = {
@@ -19,7 +19,7 @@ export type LastTime = { session_id: string; started_at: string; sets: SetLog[] 
 export type SessionExercise = {
   id: string; // block_exercise id: sets are added to this
   position: number;
-  exercise: { id: string; name: string; metrics: Metrics; archived: boolean };
+  exercise: { id: string; name: string; fields: Field[]; archived: boolean };
   note: string | null; // for this session only, unlike the catalog note
   sets: SetLog[];
   last_time: LastTime | null;
@@ -172,7 +172,7 @@ export function getSession(db: Db, userId: string, id: string): SessionTree {
         return {
           id: be.id,
           position: be.position,
-          exercise: { id: exercise.id, name: exercise.name, metrics: exercise.metrics, archived: exercise.archived },
+          exercise: { id: exercise.id, name: exercise.name, fields: exercise.fields, archived: exercise.archived },
           note: be.note,
           sets: setsOf(db, be.id),
           last_time: lastTime(db, userId, be.exercise_id, session),

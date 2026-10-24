@@ -19,9 +19,9 @@ export function setup() {
   return { db, app, as, call: as("ha-user-1") };
 }
 
-export const squat = { name: "Kniebeuge", metrics: "weight_reps" };
-export const pullup = { name: "Klimmzüge", metrics: "weight_reps" };
-export const deadhang = { name: "Deadhang", metrics: "duration" };
+export const squat = { name: "Kniebeuge", fields: ["weight", "reps"] };
+export const pullup = { name: "Klimmzüge", fields: ["weight", "reps"] };
+export const deadhang = { name: "Deadhang", fields: ["duration"] };
 
 // A session with one block per exercise; returns the session tree.
 export async function sessionWith(call: Call, exerciseIds: string[], startedAt = "2026-10-24T11:00:00Z") {

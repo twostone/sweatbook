@@ -1,14 +1,14 @@
 <script lang="ts">
   import Icon from "./Icon.svelte";
-  import { FIELDS, type RowField, type RowText } from "./logic/set-row";
+  import { rowFields, type RowField, type RowText } from "./logic/set-row";
   import { durationInput } from "./logic/numbers";
   import { fieldName } from "./drafts";
-  import type { Metrics } from "./types";
+  import type { Field } from "./types";
 
   // One set as a row of big fields. Used for logged sets and for the "next set" row (draft); the owner decides what a
   // change means (save the set, or keep the draft).
   let {
-    metrics,
+    fields: exerciseFields,
     index,
     label,
     text = $bindable(),
@@ -23,7 +23,7 @@
     onretry,
     ondelete,
   }: {
-    metrics: Metrics;
+    fields: readonly Field[]; // the exercise's fields
     index: string; // shown number, "1", "2", … or "+" for the draft row
     label: string; // for screen readers, e.g. "A1 Satz 2"
     text: RowText;
@@ -40,11 +40,11 @@
   } = $props();
 
   let noteOpen = $state(false);
-  const fields = $derived(FIELDS[metrics]);
-  const placeholder: Record<RowField, string> = { kg: "KG", reps: "–", time: "0:00" };
+  const fields = $derived(rowFields(exerciseFields));
+  const placeholder: Record<RowField, string> = { kg: "KG", reps: "–", dist: "m", time: "0:00" };
 </script>
 
-<div class="row" class:draft class:due class:two={fields.length === 2}>
+<div class="row" class:draft class:due class:two={fields.length === 2} class:three={fields.length === 3}>
   <span class="idx" aria-hidden="true">{index}</span>
   {#each fields as field (field)}
     <input
@@ -103,6 +103,13 @@
   }
   .row.two {
     grid-template-columns: var(--set-cols-2);
+  }
+  /* Three fields (kg, distance, time) share the width of two: smaller digits so "12:30" still fits. */
+  .row.three {
+    grid-template-columns: var(--set-cols-3);
+  }
+  .three .num {
+    font-size: 22px;
   }
   .idx {
     font: 800 22px var(--display);

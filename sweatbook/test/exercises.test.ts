@@ -17,26 +17,29 @@ test("exercise: create with aliases, read, list", async () => {
 test("exercise: names and aliases are unique across the catalog, case ignored (also for umlauts)", async () => {
   const { call } = setup();
   await call("POST", "/api/exercises", { ...pullup, aliases: ["Pull-up"] });
-  const sameName = await call("POST", "/api/exercises", { name: "KLIMMZÜGE", metrics: "weight_reps" });
+  const sameName = await call("POST", "/api/exercises", { name: "KLIMMZÜGE", fields: ["weight", "reps"] });
   assert.equal(sameName.status, 409);
   assert.equal(sameName.json.taken_by, "Klimmzüge");
-  assert.equal((await call("POST", "/api/exercises", { name: "pull-up", metrics: "weight_reps" })).status, 409);
+  assert.equal((await call("POST", "/api/exercises", { name: "pull-up", fields: ["weight", "reps"] })).status, 409);
   assert.equal((await call("POST", "/api/exercises", { ...squat, aliases: ["pull-up"] })).status, 409);
   assert.equal((await call("POST", "/api/exercises", squat)).status, 201);
 });
 
 test("exercise: validation", async () => {
   const { call } = setup();
-  assert.equal((await call("POST", "/api/exercises", { name: " ", metrics: "weight_reps" })).status, 400);
-  assert.equal((await call("POST", "/api/exercises", { name: "X", metrics: "distance" })).status, 400);
+  assert.equal((await call("POST", "/api/exercises", { name: " ", fields: ["weight", "reps"] })).status, 400);
+  assert.equal((await call("POST", "/api/exercises", { name: "X", fields: ["speed"] })).status, 400);
+  assert.equal((await call("POST", "/api/exercises", { name: "X", fields: ["weight"] })).status, 400, "kg alone says nothing");
+  assert.equal((await call("POST", "/api/exercises", { name: "X", fields: [] })).status, 400);
+  assert.equal((await call("POST", "/api/exercises", { name: "X", metrics: "weight_reps" })).status, 400, "the old kinds are gone");
   assert.equal((await call("GET", "/api/exercises/not-a-uuid")).status, 400);
   assert.equal((await call("GET", "/api/exercises/00000000-0000-4000-8000-000000000000")).status, 404);
 });
 
 test("exercise: search finds name or alias, recently used first", async () => {
   const { call } = setup();
-  const a = (await call("POST", "/api/exercises", { name: "Rudern vorgebeugt", metrics: "weight_reps" })).json;
-  const b = (await call("POST", "/api/exercises", { name: "Bankziehen", metrics: "weight_reps", aliases: ["Bench Pull"] })).json;
+  const a = (await call("POST", "/api/exercises", { name: "Rudern vorgebeugt", fields: ["weight", "reps"] })).json;
+  const b = (await call("POST", "/api/exercises", { name: "Bankziehen", fields: ["weight", "reps"], aliases: ["Bench Pull"] })).json;
   await call("POST", "/api/exercises", squat);
   assert.deepEqual((await call("GET", "/api/exercises?q=bench")).json.map((e: any) => e.id), [b.id]);
   assert.deepEqual((await call("GET", "/api/exercises?q=RUD")).json.map((e: any) => e.id), [a.id]);
@@ -47,17 +50,22 @@ test("exercise: search finds name or alias, recently used first", async () => {
   assert.deepEqual(all.slice(1).map((e: any) => e.name), ["Kniebeuge", "Rudern vorgebeugt"]);
 });
 
-test("exercise: update; metrics only change while there are no sets", async () => {
+test("exercise: update; fields can be added any time, removed only while no set has a value in them", async () => {
   const { call } = setup();
-  const e = (await call("POST", "/api/exercises", { name: "Hang", metrics: "weight_reps", aliases: ["Dead hang"] })).json;
-  const renamed = await call("PATCH", `/api/exercises/${e.id}`, { name: "Deadhang", metrics: "duration", note: "" });
+  const e = (await call("POST", "/api/exercises", { name: "Hang", fields: ["weight", "reps"], aliases: ["Dead hang"] })).json;
+  const renamed = await call("PATCH", `/api/exercises/${e.id}`, { name: "Deadhang", fields: ["duration", "weight", "duration"], note: "" });
   assert.equal(renamed.json.name, "Deadhang");
+  assert.deepEqual(renamed.json.fields, ["weight", "duration"], "duplicates dropped, canonical order");
   assert.deepEqual(renamed.json.aliases, ["Dead hang"]);
   assert.equal(renamed.json.note, null);
   const tree = await sessionWith(call, [e.id]);
   await call("POST", `/api/block-exercises/${tree.blocks[0].exercises[0].id}/sets`, { sets: [{ duration_s: 60 }] });
-  assert.equal((await call("PATCH", `/api/exercises/${e.id}`, { metrics: "weight_reps" })).status, 409);
-  assert.equal((await call("PATCH", `/api/exercises/${e.id}`, { metrics: "duration", aliases: [] })).json.aliases.length, 0);
+  const removeUsed = await call("PATCH", `/api/exercises/${e.id}`, { fields: ["weight", "reps"] });
+  assert.equal(removeUsed.status, 409);
+  assert.equal(removeUsed.json.field, "duration");
+  // kg was never filled in: it may go; distance may be added next to the used time
+  assert.deepEqual((await call("PATCH", `/api/exercises/${e.id}`, { fields: ["duration", "distance"] })).json.fields, ["distance", "duration"]);
+  assert.equal((await call("PATCH", `/api/exercises/${e.id}`, { fields: ["duration"], aliases: [] })).json.aliases.length, 0);
 });
 
 test("exercise: archived ones cannot be added; used ones cannot be deleted", async () => {

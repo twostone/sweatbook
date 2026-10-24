@@ -24,8 +24,8 @@
   }
 
   function line(be: SessionExercise): string {
-    if (be.sets.length) return summarize(be.sets, be.exercise.metrics);
-    if (be.last_time) return `Letztes Mal ${summarize(be.last_time.sets, be.exercise.metrics)}`;
+    if (be.sets.length) return summarize(be.sets, be.exercise.fields);
+    if (be.last_time) return `Letztes Mal ${summarize(be.last_time.sets, be.exercise.fields)}`;
     return "Noch keine Sätze";
   }
 

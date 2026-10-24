@@ -18,7 +18,6 @@ const MESSAGES: Record<string, string> = {
   "name taken": "Den Namen gibt es schon im Katalog.",
   "exercise archived": "Die Übung ist archiviert.",
   "exercise in use": "Die Übung wird schon benutzt und lässt sich nur archivieren.",
-  "exercise has sets": "Die Satzfelder lassen sich nicht mehr ändern, die Übung hat schon Sätze.",
   "ended_at before started_at": "Das Ende liegt vor dem Start.",
 };
 

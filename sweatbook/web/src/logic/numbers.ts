@@ -39,6 +39,16 @@ export function parseKg(text: string): number | null | undefined {
   return kg <= MAX_KG ? kg : undefined;
 }
 
+// Whole metres; an "m" after the number is allowed ("60 m").
+const MAX_DISTANCE_M = 1_000_000;
+export function parseDistance(text: string): number | null | undefined {
+  const t = text.trim().replace(/\s*m$/i, "");
+  if (!t) return null;
+  if (!/^\d+$/.test(t)) return undefined;
+  const metres = Number(t);
+  return metres <= MAX_DISTANCE_M ? metres : undefined;
+}
+
 export function parseReps(text: string): number | null | undefined {
   const t = text.trim();
   if (!t) return null;

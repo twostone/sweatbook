@@ -5,7 +5,7 @@ import * as z from "zod";
 import type { Db } from "./db.ts";
 import { addBlock, addExerciseToBlock, addRound, deleteBlock, removeBlockExercise, setBlockOrder, updateBlockExercise } from "./data/blocks.ts";
 import { ConflictError, InvalidError, NotFoundError } from "./data/common.ts";
-import { createExercise, deleteExercise, getExercise, listExercises, METRICS, updateExercise } from "./data/exercises.ts";
+import { createExercise, deleteExercise, FIELDS, getExercise, listExercises, updateExercise } from "./data/exercises.ts";
 import { createSession, deleteSession, exerciseHistory, getSession, listSessions, updateSession } from "./data/sessions.ts";
 import { addSets, deleteSet, updateSet } from "./data/sets.ts";
 import { resolveUser, type User } from "./data/users.ts";
@@ -24,25 +24,29 @@ const MAX_EXERCISES_PER_BLOCK = 10;
 const MAX_ALIASES = 10;
 
 const name = z.string().trim().min(1).max(80);
+// Which fields its sets have; that one of them is reps, distance or time is checked in data/exercises.ts.
+const fields = z.array(z.enum(FIELDS)).min(1).max(FIELDS.length);
 const exerciseBody = z.object({
   name,
-  metrics: z.enum(METRICS),
+  fields,
   note: optionalText(1000),
   aliases: z.array(name).max(MAX_ALIASES).optional(),
 });
 const exercisePatch = z.object({
   name: name.optional(),
-  metrics: z.enum(METRICS).optional(),
+  fields: fields.optional(),
   note: optionalText(1000),
   aliases: z.array(name).max(MAX_ALIASES).optional(),
   archived: z.boolean().optional(),
 });
 
 // weight_kg null = bodyweight. Which fields a set needs depends on the exercise and is checked in data/sets.ts.
+const MAX_DISTANCE_M = 1_000_000;
 const setFields = {
   weight_kg: z.number().min(0).max(1000).nullable().optional(),
   reps: z.number().int().min(0).max(1000).nullable().optional(),
   duration_s: z.number().int().min(0).max(86400).nullable().optional(),
+  distance_m: z.number().int().min(0).max(MAX_DISTANCE_M).nullable().optional(),
   is_max: z.boolean().optional(),
   note: optionalText(500),
 };

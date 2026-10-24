@@ -34,7 +34,7 @@ test("schema: foreign keys are enforced and STRICT rejects wrong types", () => {
   );
   db.prepare("INSERT INTO app_user (id, ha_user_id, created_at) VALUES ('u', 'ha', 'x')").run();
   assert.throws(() =>
-    db.prepare("INSERT INTO exercise (id, user_id, name, metrics, archived, created_at) VALUES ('e', 'u', 'A', 'weight_reps', 'no', 'x')").run(),
+    db.prepare("INSERT INTO exercise (id, user_id, name, has_reps, archived, created_at) VALUES ('e', 'u', 'A', 1, 'no', 'x')").run(),
   );
 });
 
@@ -48,7 +48,32 @@ test("migration v2: existing block exercises keep their data and get an empty no
     INSERT INTO block (id, session_id, position, type) VALUES ('b', 's', 0, 'straight');
     INSERT INTO block_exercise (id, block_id, exercise_id, position) VALUES ('be', 'b', 'e', 0);
   `);
-  migrate(db);
+  migrate(db, MIGRATIONS.slice(0, 2));
   assert.equal(schemaVersion(db), 2);
   assert.deepEqual({ ...db.prepare("SELECT id, exercise_id, note FROM block_exercise").get() }, { id: "be", exercise_id: "e", note: null });
+});
+
+test("migration v3: the three old kinds become field flags, sets keep their values and get an empty distance", () => {
+  const db = new DatabaseSync(":memory:");
+  migrate(db, MIGRATIONS.slice(0, 2));
+  db.exec(`
+    INSERT INTO app_user (id, ha_user_id, created_at) VALUES ('u', 'ha', 'x');
+    INSERT INTO exercise (id, user_id, name, metrics, created_at) VALUES
+      ('wr', 'u', 'Kniebeuge', 'weight_reps', 'x'), ('d', 'u', 'Deadhang', 'duration', 'x'), ('wd', 'u', 'Weste', 'weight_duration', 'x');
+    INSERT INTO session (id, user_id, started_at, created_at) VALUES ('s', 'u', 'x', 'x');
+    INSERT INTO block (id, session_id, position, type) VALUES ('b', 's', 0, 'straight');
+    INSERT INTO block_exercise (id, block_id, exercise_id, position) VALUES ('be', 'b', 'wr', 0);
+    INSERT INTO set_log (id, block_exercise_id, position, weight_kg, reps, logged_at) VALUES ('l', 'be', 0, 100, 5, 'x');
+  `);
+  migrate(db);
+  assert.equal(schemaVersion(db), 3);
+  const flags = db.prepare("SELECT id, has_weight, has_reps, has_distance, has_duration FROM exercise ORDER BY id").all().map((r) => ({ ...r }));
+  assert.deepEqual(flags, [
+    { id: "d", has_weight: 0, has_reps: 0, has_distance: 0, has_duration: 1 },
+    { id: "wd", has_weight: 1, has_reps: 0, has_distance: 0, has_duration: 1 },
+    { id: "wr", has_weight: 1, has_reps: 1, has_distance: 0, has_duration: 0 },
+  ]);
+  const columns = (db.prepare("PRAGMA table_info(exercise)").all() as { name: string }[]).map((c) => c.name);
+  assert.ok(!columns.includes("metrics"));
+  assert.deepEqual({ ...db.prepare("SELECT weight_kg, reps, distance_m FROM set_log").get() }, { weight_kg: 100, reps: 5, distance_m: null });
 });

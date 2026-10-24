@@ -11,7 +11,7 @@ const blocks = (...withSets: boolean[]): SessionBlock[] =>
     position: i + 1,
     type: "straight",
     exercises: [
-      { id: `be${i}`, position: 1, exercise: { id: `e${i}`, name: `Übung ${i}`, metrics: "weight_reps", archived: false }, note: null, sets: has ? [aSet] : [], last_time: null },
+      { id: `be${i}`, position: 1, exercise: { id: `e${i}`, name: `Übung ${i}`, fields: ["weight", "reps"], archived: false }, note: null, sets: has ? [aSet] : [], last_time: null },
     ],
   }));
 

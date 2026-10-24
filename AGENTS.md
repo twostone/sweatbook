@@ -50,18 +50,20 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
 
 ```
 app_user        HA-Nutzer -> eigene id (ha_user_id eindeutig)
-exercise        Katalog pro Nutzer: name, metrics (weight_reps | duration | weight_duration), note, archived
+exercise        Katalog pro Nutzer: name, Satzfelder (has_weight, has_reps, has_distance, has_duration), note, archived
 exercise_alias  weitere Namen für die Suche
 session         ein Training: title, started_at, ended_at (null = läuft), note
 block           geordnet in der Session: type straight (eine Übung) | superset (A1/A2/…), params (später)
 block_exercise  Übung im Block mit Reihenfolge und note (nur für dieses Training, z. B. der Plan); existiert auch ohne Sätze
-set_log         Satz: weight_kg (null = Körpergewicht), reps, duration_s, is_max, note, extra (später), logged_at
+set_log         Satz: weight_kg (null = Körpergewicht), reps, duration_s, distance_m, is_max, note, extra (später), logged_at
 ```
 
 - **Ein eingetragener Satz ist erledigt.** Ein Häkchen gibt es erst mit geplanten Sätzen (Phase 2).
-- **`metrics` bestimmt die Satzfelder** (`checkSet` in `data/sets.ts`): `weight_reps` braucht `reps`, `duration` braucht
-  `duration_s` ohne Gewicht, `weight_duration` braucht `duration_s`. `weight_kg` leer = Körpergewicht, ein Wert ist
-  Zusatzgewicht, nie negativ (Assistenz über die Notiz). `metrics` lässt sich nur ändern, solange die Übung keine Sätze hat.
+- **Die Übung bestimmt die Satzfelder** (`has_weight`, `has_reps`, `has_distance`, `has_duration`; API `fields`,
+  `checkSet` in `data/sets.ts`): ein Satz hat nur diese Felder, `weight_kg` darf leer bleiben (= Körpergewicht bzw. ohne
+  Zusatzlast; ein Wert ist Zusatzgewicht, nie negativ, Assistenz über die Notiz), von den übrigen muss mindestens eines
+  gefüllt sein. Eine Übung braucht Wdh., Strecke oder Zeit. Felder kommen jederzeit dazu, entfernen geht nur, solange
+  kein Satz einen Wert darin hat (409 `field in use`). Strecke in ganzen Metern (`distance_m`).
 - **Namen und Aliase sind pro Nutzer eindeutig**, über Namen und Aliase hinweg, ohne Groß-/Kleinschreibung. Verglichen
   wird in JS (`nameKey` in `data/common.ts`, `toLocaleLowerCase("de")`), weil SQLites `lower()` nur ASCII kennt; die
   Unique-Indizes auf `lower(...)` sind nur ein Rückhalt. Konflikt -> 409 mit `taken_by`.
@@ -104,7 +106,7 @@ Gespeichertem). Optionale Textfelder: `""` und `null` löschen, fehlt das Feld, 
 | --- | --- |
 | `GET /api/me` | eigene Nutzer-ID und Anzeigename |
 | `GET /api/exercises?q=` | Katalog inkl. archivierter, Suche über Namen und Aliase, zuletzt genutzte zuerst |
-| `POST /api/exercises` | anlegen (`name`, `metrics`, `note`, `aliases`) |
+| `POST /api/exercises` | anlegen (`name`, `fields`, `note`, `aliases`) |
 | `GET`, `PATCH`, `DELETE /api/exercises/:id` | lesen, ändern (`aliases` ersetzt die Liste, `archived`), löschen nur unbenutzt |
 | `GET /api/exercises/:id/history?before=&limit=` | Sätze nach Sessions, neueste zuerst |
 | `GET /api/sessions?before=&limit=` | Liste mit `block_count`, `set_count` |
@@ -116,7 +118,7 @@ Gespeichertem). Optionale Textfelder: `""` und `null` löschen, fehlt das Feld, 
 | `PATCH /api/block-exercises/:id` | Notiz der Übung in dieser Session (`note`) |
 | `POST /api/blocks/:id/rounds` | ein Satz je Übung des Blocks |
 | `DELETE /api/blocks/:id`, `DELETE /api/block-exercises/:id` | Block bzw. Übung aus dem Block entfernen |
-| `POST /api/block-exercises/:id/sets` | 1–20 Sätze (Schnelleingabe „3×5@100“ parst der Client) |
+| `POST /api/block-exercises/:id/sets` | 1–20 Sätze (Schnelleingabe „3×5@100“ parst der Client; nur bei Übungen mit genau einem Feld aus Wdh., Strecke, Zeit) |
 | `PATCH`, `DELETE /api/sets/:id` | Satz ändern, löschen |
 
 Änderungen an Blöcken antworten mit der ganzen Session, damit der Client einfach ersetzt, was er zeigt.

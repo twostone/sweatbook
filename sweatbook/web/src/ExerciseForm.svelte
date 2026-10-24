@@ -5,14 +5,13 @@
   import { ApiError } from "./api";
   import { addAlias, similarExercises } from "./logic/catalog";
   import { guard } from "./store.svelte";
-  import type { Exercise, ExerciseInput, Metrics } from "./types";
+  import { VALUE_FIELDS, type Exercise, type ExerciseInput, type Field } from "./types";
 
   // The fields of a catalog exercise, for "Übung anlegen" and the detail page. Warns about similar names while typing;
   // an exact clash is refused by the server (409 with taken_by) and shown at the name.
   let {
     initial,
     exceptId,
-    metricsLocked = false,
     submitLabel,
     onsave,
     onpick,
@@ -20,7 +19,6 @@
   }: {
     initial: ExerciseInput;
     exceptId?: string; // the exercise being edited, left out of the warning
-    metricsLocked?: boolean; // it has sets: their columns would no longer fit
     submitLabel: string;
     onsave: (input: ExerciseInput) => Promise<void>;
     onpick?: (exercise: Exercise) => void; // tapping a similar exercise
@@ -29,7 +27,7 @@
 
   const start = untrack(() => initial);
   let name = $state(start.name);
-  let metrics = $state<Metrics>(start.metrics);
+  let fields = $state<Field[]>([...start.fields]);
   let aliases = $state<string[]>(start.aliases ?? []);
   let aliasText = $state("");
   let note = $state(start.note ?? "");
@@ -39,11 +37,19 @@
 
   const MAX_SIMILAR = 5; // a hint, not a second catalog
 
-  const OPTIONS: { value: Metrics; label: string }[] = [
-    { value: "weight_reps", label: "kg + Wdh." },
+  // In the order a set row shows them.
+  const OPTIONS: { value: Field; label: string }[] = [
+    { value: "weight", label: "Gewicht" },
+    { value: "reps", label: "Wdh." },
+    { value: "distance", label: "Strecke" },
     { value: "duration", label: "Zeit" },
-    { value: "weight_duration", label: "kg + Zeit" },
   ];
+  const ORDER = OPTIONS.map((o) => o.value);
+  const toggle = (field: Field) =>
+    (fields = fields.includes(field) ? fields.filter((f) => f !== field) : ORDER.filter((f) => f === field || fields.includes(f)));
+  // Like the server: kg alone says nothing about a set.
+  const hasValueField = $derived(fields.some((f) => VALUE_FIELDS.includes(f)));
+  let fieldInUse = $state<string | null>(null);
 
   $effect(() => {
     guard(async () => {
@@ -64,13 +70,19 @@
     if (aliasText.trim()) takeAlias(); // typed but not yet added: meant to be added
     busy = true;
     takenBy = null;
+    fieldInUse = null;
     await guard(async () => {
       try {
-        await onsave({ name: name.trim(), metrics, aliases: $state.snapshot(aliases), note: note.trim() });
+        await onsave({ name: name.trim(), fields: $state.snapshot(fields), aliases: $state.snapshot(aliases), note: note.trim() });
       } catch (err) {
-        // A taken name is shown at the field; anything else goes to the error bar.
+        // A taken name and a field that still holds values are shown in place; anything else goes to the error bar.
         if (err instanceof ApiError && err.status === 409 && typeof err.detail.taken_by === "string") takenBy = err.detail.taken_by;
-        else throw err;
+        else if (err instanceof ApiError && err.status === 409 && typeof err.detail.field === "string") {
+          // The field stays on the server, so it goes back into the selection too.
+          const field = err.detail.field as Field;
+          fieldInUse = OPTIONS.find((o) => o.value === field)?.label ?? field;
+          if (!fields.includes(field)) toggle(field);
+        } else throw err;
       }
     });
     busy = false;
@@ -100,12 +112,16 @@
       <legend class="label">Satzfelder</legend>
       <div class="options">
         {#each OPTIONS as o (o.value)}
-          <button type="button" class="opt" aria-pressed={metrics === o.value} disabled={metricsLocked} onclick={() => (metrics = o.value)}>{o.label}</button>
+          <button type="button" class="opt" aria-pressed={fields.includes(o.value)} onclick={() => toggle(o.value)}>{o.label}</button>
         {/each}
       </div>
-      <p class="muted small">
-        {metricsLocked ? "Gesperrt: Die Übung hat schon Sätze." : "Lässt sich nur ändern, solange es keine Sätze gibt."}
-      </p>
+      {#if fieldInUse}
+        <p class="warn" role="alert">„{fieldInUse}“ hat schon Werte in Sätzen und bleibt.</p>
+      {:else if !hasValueField}
+        <p class="warn">Mindestens Wdh., Strecke oder Zeit wählen.</p>
+      {:else}
+        <p class="muted small">Gewicht leer heißt Körpergewicht. Felder mit Werten in Sätzen bleiben.</p>
+      {/if}
     </fieldset>
 
     <label class="label" for="exercise-alias">Aliase</label>
@@ -143,7 +159,7 @@
     <label class="label" for="exercise-note">Ausführung</label>
     <textarea id="exercise-note" class="field" maxlength="1000" placeholder="z. B. Griff, Sitzstufe" bind:value={note}></textarea>
   </div>
-  <button type="submit" class="btn big primary" disabled={busy || !name.trim()}>{submitLabel}</button>
+  <button type="submit" class="btn big primary" disabled={busy || !name.trim() || !hasValueField}>{submitLabel}</button>
 </form>
 
 <style>
@@ -171,7 +187,7 @@
   }
   .options {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 8px;
   }
   .opt {

@@ -14,6 +14,7 @@ export type Exercise = {
   last_used_at: string | null;
 };
 export type ExerciseInput = { name: string; metrics: Metrics; note?: string | null; aliases?: string[] };
+export type ExercisePatch = Partial<ExerciseInput> & { archived?: boolean };
 
 // weight_kg null = bodyweight (a value is added weight).
 export type SetLog = {
@@ -50,4 +51,7 @@ export type SessionSummary = {
   set_count: number;
 };
 export type SessionTree = Omit<SessionSummary, "block_count" | "set_count"> & { blocks: SessionBlock[] };
+// One session's sets of an exercise, for its history (newest first).
+export type HistoryEntry = { session_id: string; title: string | null; started_at: string; sets: SetLog[] };
+
 export type SessionPatch = { title?: string | null; started_at?: string; ended_at?: string | null; note?: string | null };

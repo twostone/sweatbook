@@ -162,7 +162,8 @@ Actions to create and approve pull requests“.
 ## Stand und offene Punkte
 
 - Phase 1: Backend fertig und getestet. Oberfläche: Session-Ablauf (Start minimal, Übersicht, Übung, Supersatz, Sheet
-  „Übung hinzufügen“, „Übung anlegen“ minimal) steht; Katalog/Detail und Verlauf folgen. Mockups und Konzept liegen
+  „Übung hinzufügen“) und Übungskatalog (Liste, Anlegen mit Aliasen und Ähnlichkeits-Hinweis, Detail mit Archivieren,
+  Löschen und Satzhistorie) stehen; Start komplett und Verlauf folgen. Mockups und Konzept liegen
   außerhalb des Repos.
 - Nicht am echten System geprüft: Ingress-Header, Start in Home Assistant, ob die Companion-App `prefers-color-scheme`
   an die eingebettete Seite weitergibt.

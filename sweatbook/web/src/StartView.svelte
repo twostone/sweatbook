@@ -70,6 +70,7 @@
   </main>
 
   <footer>
+    <button type="button" class="btn big square" aria-label="Übungskatalog" onclick={() => navigate(paths.catalog())}><Icon name="list" /></button>
     <button type="button" class="btn big grow" class:primary={!open} disabled={busy} onclick={start}>
       <Icon name="plus" />Neue Session
     </button>
@@ -88,6 +89,11 @@
   }
   .grow {
     flex: 1;
+  }
+  .square {
+    width: 60px;
+    padding: 0;
+    flex: none;
   }
   .live {
     display: flex;

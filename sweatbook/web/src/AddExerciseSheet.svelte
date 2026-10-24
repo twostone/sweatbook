@@ -70,7 +70,7 @@
   // "Übung anlegen" is a page on top of this sheet's history entry: back (or saving) returns to the sheet as it was.
   function createNew() {
     rememberSheet({ kind: "add-exercise", target, query });
-    navigate(paths.newExercise(query.trim()));
+    navigate(paths.newExercise(query.trim(), true));
   }
 </script>
 

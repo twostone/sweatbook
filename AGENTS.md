@@ -26,7 +26,8 @@ sweatbook/               die App (Docker-Build-Kontext)
     data/                  Datenzugriff, ein Modul pro Entität (users, exercises, sessions, blocks, sets) + common
     app.ts, server.ts      API, Ingress-Sperre, Identität, Start
     log.ts, options.ts     Logger (logfmt) und App-Optionen (wie meal-planner)
-  web/                   Frontend: Svelte 5 + Vite (noch ein Platzhalter)
+  web/                   Frontend: Svelte 5 + Vite (Runes), Hash-Routen in router.svelte.ts, Zustand in store.svelte.ts
+    src/logic/             reine Client-Logik ohne DOM (Schnelleingabe, Zeit, Vorbelegung, Weiter-Ziel, Format), getestet
   test/                  Tests (node:test)
 ```
 
@@ -139,6 +140,14 @@ Actions to create and approve pull requests“.
 ## Regeln beim Ändern
 
 - **Frontend-URLs immer relativ** (`api/sessions`), nie `/api/...`: Die App läuft unter einem wechselnden Ingress-Präfix.
+- **Navigation:** Seiten über Hash-Routen (`#/s/<id>/b/<id>`), Sheets belegen einen History-Eintrag ohne URL-Änderung
+  und stehen in `history.state` (Zurück schließt sie, „Übung anlegen“ kehrt in das Sheet zurück). Geschwister (nächster
+  Block) per `replace`, „nach oben“ per `goUp`, damit die Zurück-Taste nicht im Kreis läuft.
+- **Funkloch:** Ungesendete Satzzeilen liegen in `localStorage` (`drafts.ts`, `storage.ts`, jeder Zugriff in try/catch),
+  die zuletzt geladene Session und der Nutzer als Anzeige-Cache. Keine Warteschlange: Erneut senden macht der Nutzer.
+  502–504 zählen wie fehlendes Netz (Ingress erreicht die App nicht).
+- **Client-Logik** ohne DOM gehört nach `web/src/logic/` (Importe dort mit `.ts`-Endung) und bekommt Tests in
+  `test/web-*.test.ts`. Typen der API spiegelt `web/src/types.ts`.
 - **Design „sportlich-kräftig“**, helles und dunkles Theme folgen `prefers-color-scheme`; alle Farben als CSS-Variablen
   (`web/src/app.css`). Limettengrün im hellen Theme nur als Fläche mit dunkler Schrift, als Text das dunkle Oliv.
 - **APIs und Schnittstellen vor der Nutzung gegen die aktuelle Dokumentation prüfen** (HA-App-Konfiguration, Hono,
@@ -152,7 +161,9 @@ Actions to create and approve pull requests“.
 
 ## Stand und offene Punkte
 
-- Phase 1: Backend fertig und getestet, Oberfläche ist ein Platzhalter. Mockups und Konzept liegen außerhalb des Repos.
+- Phase 1: Backend fertig und getestet. Oberfläche: Session-Ablauf (Start minimal, Übersicht, Übung, Supersatz, Sheet
+  „Übung hinzufügen“, „Übung anlegen“ minimal) steht; Katalog/Detail und Verlauf folgen. Mockups und Konzept liegen
+  außerhalb des Repos.
 - Nicht am echten System geprüft: Ingress-Header, Start in Home Assistant, ob die Companion-App `prefers-color-scheme`
   an die eingebettete Seite weitergibt.
 - Kein `icon.png` für den App-Store (optional; aus `web/public/favicon.svg` erzeugen, wenn gewünscht).

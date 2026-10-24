@@ -83,10 +83,12 @@
               {#each block.exercises as be, j (be.id)}
                 <span class="name small">A{j + 1} {be.exercise.name}</span>
                 <span class="meta">{line(be)}</span>
+                {#if be.note}<span class="meta note">„{be.note}“</span>{/if}
               {/each}
             {:else}
               <span class="name">{block.exercises[0]?.exercise.name}</span>
               <span class="meta">{block.exercises[0] ? line(block.exercises[0]) : ""}</span>
+              {#if block.exercises[0]?.note}<span class="meta note">„{block.exercises[0].note}“</span>{/if}
             {/if}
           </span>
           {#if !reordering}<span class="chev"><Icon name="chevron" size={20} /></span>{/if}
@@ -259,6 +261,10 @@
     font-weight: 500;
     font-size: 15px;
     color: var(--muted);
+  }
+  .note {
+    font-style: italic;
+    overflow-wrap: anywhere;
   }
   .chev {
     color: var(--muted);

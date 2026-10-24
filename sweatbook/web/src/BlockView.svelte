@@ -1,4 +1,5 @@
 <script lang="ts">
+  import ExerciseNote from "./ExerciseNote.svelte";
   import ExerciseSets from "./ExerciseSets.svelte";
   import Icon from "./Icon.svelte";
   import { draftInput, dropDraft, fieldName, freshDraft, keepDraft, type DraftRow } from "./drafts";
@@ -72,6 +73,7 @@
               <span class="tag">{tag(i)}</span>
               <h2 id="ex-{be.id}" class="display">{be.exercise.name}</h2>
             </div>
+            <ExerciseNote {be} label="{tag(i)} {be.exercise.name}" />
             <ExerciseSets {be} tag={tag(i)} bind:draft={drafts[be.id]} highlight={i === due} compact />
           </section>
         {/each}
@@ -81,6 +83,7 @@
       {:else}
         {@const be = block.exercises[0]!}
         <h1 class="display page-title big">{be.exercise.name}</h1>
+        <ExerciseNote {be} label={be.exercise.name} />
         <ExerciseSets {be} bind:draft={drafts[be.id]} />
       {/if}
     </main>

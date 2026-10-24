@@ -20,6 +20,7 @@ export type SessionExercise = {
   id: string; // block_exercise id: sets are added to this
   position: number;
   exercise: { id: string; name: string; metrics: Metrics; archived: boolean };
+  note: string | null; // for this session only, unlike the catalog note
   sets: SetLog[];
   last_time: LastTime | null;
 };
@@ -161,17 +162,18 @@ export function getSession(db: Db, userId: string, id: string): SessionTree {
     position: number;
     type: "straight" | "superset";
   }[];
-  const exercisesOf = db.prepare("SELECT id, position, exercise_id FROM block_exercise WHERE block_id = ? ORDER BY position");
+  const exercisesOf = db.prepare("SELECT id, position, exercise_id, note FROM block_exercise WHERE block_id = ? ORDER BY position");
   return {
     ...session,
     blocks: blocks.map((block) => ({
       ...block,
-      exercises: (exercisesOf.all(block.id) as { id: string; position: number; exercise_id: string }[]).map((be) => {
+      exercises: (exercisesOf.all(block.id) as { id: string; position: number; exercise_id: string; note: string | null }[]).map((be) => {
         const exercise = getExercise(db, userId, be.exercise_id);
         return {
           id: be.id,
           position: be.position,
           exercise: { id: exercise.id, name: exercise.name, metrics: exercise.metrics, archived: exercise.archived },
+          note: be.note,
           sets: setsOf(db, be.id),
           last_time: lastTime(db, userId, be.exercise_id, session),
         };

@@ -37,3 +37,18 @@ test("schema: foreign keys are enforced and STRICT rejects wrong types", () => {
     db.prepare("INSERT INTO exercise (id, user_id, name, metrics, archived, created_at) VALUES ('e', 'u', 'A', 'weight_reps', 'no', 'x')").run(),
   );
 });
+
+test("migration v2: existing block exercises keep their data and get an empty note", () => {
+  const db = new DatabaseSync(":memory:");
+  migrate(db, MIGRATIONS.slice(0, 1));
+  db.exec(`
+    INSERT INTO app_user (id, ha_user_id, created_at) VALUES ('u', 'ha', 'x');
+    INSERT INTO exercise (id, user_id, name, metrics, created_at) VALUES ('e', 'u', 'A', 'weight_reps', 'x');
+    INSERT INTO session (id, user_id, started_at, created_at) VALUES ('s', 'u', 'x', 'x');
+    INSERT INTO block (id, session_id, position, type) VALUES ('b', 's', 0, 'straight');
+    INSERT INTO block_exercise (id, block_id, exercise_id, position) VALUES ('be', 'b', 'e', 0);
+  `);
+  migrate(db);
+  assert.equal(schemaVersion(db), 2);
+  assert.deepEqual({ ...db.prepare("SELECT id, exercise_id, note FROM block_exercise").get() }, { id: "be", exercise_id: "e", note: null });
+});

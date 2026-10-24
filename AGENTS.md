@@ -170,8 +170,8 @@ Actions to create and approve pull requests“.
 - Der Start erkennt die offene Session unter den neuesten (`START_SESSIONS` in `store.svelte.ts`). Eine ältere offene
   (nur per API wiedergeöffnet) zeigt er nicht. Mockups und Konzept liegen
   außerhalb des Repos.
-- Nicht am echten System geprüft: Ingress-Header, Start in Home Assistant, ob die Companion-App `prefers-color-scheme`
-  an die eingebettete Seite weitergibt.
+- Am echten Home Assistant geprüft (24.10.2026): Ingress-Header `X-Remote-User-*`, Start der App, `prefers-color-scheme`
+  kommt in der Companion-App an (kein eigener Theme-Umschalter nötig). Noch offen: Android-Zahlentastatur bei kg und Zeit.
 - Kein `icon.png` für den App-Store (optional; aus `web/public/favicon.svg` erzeugen, wenn gewünscht).
 
 ## Git und Pull Requests

@@ -53,7 +53,7 @@ exercise        Katalog pro Nutzer: name, metrics (weight_reps | duration | weig
 exercise_alias  weitere Namen für die Suche
 session         ein Training: title, started_at, ended_at (null = läuft), note
 block           geordnet in der Session: type straight (eine Übung) | superset (A1/A2/…), params (später)
-block_exercise  Übung im Block mit Reihenfolge; existiert auch ohne Sätze
+block_exercise  Übung im Block mit Reihenfolge und note (nur für dieses Training, z. B. der Plan); existiert auch ohne Sätze
 set_log         Satz: weight_kg (null = Körpergewicht), reps, duration_s, is_max, note, extra (später), logged_at
 ```
 
@@ -112,6 +112,7 @@ Gespeichertem). Optionale Textfelder: `""` und `null` löschen, fehlt das Feld, 
 | `POST /api/sessions/:id/blocks` | neuer Block mit einer Übung |
 | `PUT /api/sessions/:id/block-order` | Reihenfolge (alle Block-IDs genau einmal) |
 | `POST /api/blocks/:id/exercises` | Übung dazu -> Supersatz |
+| `PATCH /api/block-exercises/:id` | Notiz der Übung in dieser Session (`note`) |
 | `POST /api/blocks/:id/rounds` | ein Satz je Übung des Blocks |
 | `DELETE /api/blocks/:id`, `DELETE /api/block-exercises/:id` | Block bzw. Übung aus dem Block entfernen |
 | `POST /api/block-exercises/:id/sets` | 1–20 Sätze (Schnelleingabe „3×5@100“ parst der Client) |

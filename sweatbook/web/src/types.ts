@@ -36,6 +36,7 @@ export type SessionExercise = {
   id: string; // block_exercise id: sets are added to this
   position: number;
   exercise: { id: string; name: string; metrics: Metrics; archived: boolean };
+  note: string | null; // for this session only, unlike the catalog note
   sets: SetLog[];
   last_time: LastTime | null;
 };

@@ -18,6 +18,7 @@ const exercise = (sets: SetLog[], lastSets: SetLog[] | null): SessionExercise =>
   id: "be",
   position: 1,
   exercise: { id: "e", name: "Kniebeuge", metrics: "weight_reps", archived: false },
+  note: null,
   sets,
   last_time: lastSets ? { session_id: "s0", started_at: "2026-10-17T11:00:00.000Z", sets: lastSets } : null,
 });

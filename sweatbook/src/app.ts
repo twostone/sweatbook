@@ -3,7 +3,7 @@ import { getConnInfo } from "@hono/node-server/conninfo";
 import { zValidator } from "@hono/zod-validator";
 import * as z from "zod";
 import type { Db } from "./db.ts";
-import { addBlock, addExerciseToBlock, addRound, deleteBlock, removeBlockExercise, setBlockOrder } from "./data/blocks.ts";
+import { addBlock, addExerciseToBlock, addRound, deleteBlock, removeBlockExercise, setBlockOrder, updateBlockExercise } from "./data/blocks.ts";
 import { ConflictError, InvalidError, NotFoundError } from "./data/common.ts";
 import { createExercise, deleteExercise, getExercise, listExercises, METRICS, updateExercise } from "./data/exercises.ts";
 import { createSession, deleteSession, exerciseHistory, getSession, listSessions, updateSession } from "./data/sessions.ts";
@@ -60,6 +60,7 @@ const sessionPatch = z.object({
 });
 const page = z.object({ before: isoTime.optional(), limit: z.coerce.number().int().min(1).max(100).optional() });
 const exerciseRef = z.object({ exercise_id: id });
+const blockExercisePatch = z.object({ note: optionalText(1000) });
 
 export type AppOptions = {
   // If set, only connections from this IP are served. HA ingress always connects from 172.30.32.2 (Supervisor);
@@ -161,6 +162,9 @@ export function createApp(db: Db, opts: AppOptions = {}) {
     c.json(addRound(db, c.get("user").id, c.req.valid("param").id, c.req.valid("json").sets), 201),
   );
   app.delete("/api/blocks/:id", zValidator("param", idParam), (c) => c.json(deleteBlock(db, c.get("user").id, c.req.valid("param").id)));
+  app.patch("/api/block-exercises/:id", zValidator("param", idParam), zValidator("json", blockExercisePatch), (c) =>
+    c.json(updateBlockExercise(db, c.get("user").id, c.req.valid("param").id, c.req.valid("json"))),
+  );
   app.delete("/api/block-exercises/:id", zValidator("param", idParam), (c) =>
     c.json(removeBlockExercise(db, c.get("user").id, c.req.valid("param").id)),
   );

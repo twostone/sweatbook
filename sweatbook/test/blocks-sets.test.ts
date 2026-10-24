@@ -137,5 +137,22 @@ test("blocks and sets: other users get 404", async () => {
   assert.equal((await ben("PATCH", `/api/sets/${set.id}`, { reps: 6 })).status, 404);
   assert.equal((await ben("DELETE", `/api/sets/${set.id}`)).status, 404);
   assert.equal((await ben("DELETE", `/api/blocks/${tree.blocks[0].id}`)).status, 404);
+  assert.equal((await ben("PATCH", `/api/block-exercises/${be}`, { note: "x" })).status, 404);
   assert.equal((await ben("DELETE", `/api/block-exercises/${be}`)).status, 404);
+});
+
+test("block exercises: a note for this session, kept when left out, cleared by empty string", async () => {
+  const { call } = setup();
+  const { s } = await catalog(call);
+  const be = (await sessionWith(call, [s.id])).blocks[0].exercises[0].id;
+  const note = (tree: any) => tree.blocks[0].exercises[0].note;
+  const patch = (body: object) => call("PATCH", `/api/block-exercises/${be}`, body);
+  const set = await patch({ note: " 5 × max, 2 min Pause " });
+  assert.equal(set.status, 200);
+  assert.equal(note(set.json), "5 × max, 2 min Pause");
+  assert.equal(note((await call("GET", `/api/sessions/${set.json.id}`)).json), "5 × max, 2 min Pause");
+  assert.equal(note((await patch({})).json), "5 × max, 2 min Pause");
+  assert.equal((await patch({ note: "x".repeat(1001) })).status, 400);
+  assert.equal(note((await patch({ note: "" })).json), null);
+  assert.equal((await call("PATCH", `/api/block-exercises/${crypto.randomUUID()}`, { note: "x" })).status, 404);
 });

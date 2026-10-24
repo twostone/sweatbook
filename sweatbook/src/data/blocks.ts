@@ -91,6 +91,13 @@ export function removeBlockExercise(db: Db, userId: string, blockExerciseId: str
   return getSession(db, userId, owner.session_id);
 }
 
+// Fields left out stay; null clears the note.
+export function updateBlockExercise(db: Db, userId: string, blockExerciseId: string, patch: { note?: string | null }): SessionTree {
+  const owner = ownedBlockExercise(db, userId, blockExerciseId);
+  if (patch.note !== undefined) db.prepare("UPDATE block_exercise SET note = ? WHERE id = ?").run(patch.note, blockExerciseId);
+  return getSession(db, userId, owner.session_id);
+}
+
 export type RoundInput = SetInput & { block_exercise_id: string };
 
 // "+ Runde" in a superset: one set for every exercise of the block, all or none. The client fills in the values

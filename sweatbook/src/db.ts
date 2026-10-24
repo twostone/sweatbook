@@ -79,6 +79,8 @@ export const MIGRATIONS: readonly string[] = [
   ) STRICT;
   CREATE INDEX set_log_block_exercise ON set_log(block_exercise_id, position);
   `,
+  // v2: a note per exercise in a session, e.g. the plan ("5 × max, 2 min Pause").
+  `ALTER TABLE block_exercise ADD COLUMN note TEXT;`,
 ];
 
 export type Db = DatabaseSync;

@@ -108,6 +108,8 @@ export const addExerciseToBlock = (blockId: string, exerciseId: string) =>
 export const addRound = (blockId: string, sets: (SetInput & { block_exercise_id: string })[]) =>
   request<SessionTree>("POST", `api/blocks/${enc(blockId)}/rounds`, { sets });
 export const deleteBlock = (blockId: string) => request<SessionTree>("DELETE", `api/blocks/${enc(blockId)}`);
+export const updateBlockExercise = (blockExerciseId: string, patch: { note: string | null }) =>
+  request<SessionTree>("PATCH", `api/block-exercises/${enc(blockExerciseId)}`, patch);
 export const removeBlockExercise = (blockExerciseId: string) =>
   request<SessionTree>("DELETE", `api/block-exercises/${enc(blockExerciseId)}`);
 

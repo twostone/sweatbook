@@ -1,0 +1,4 @@
+configuration:
+  log_level:
+    name: Protokollstufe
+    description: Wie viel die App in ihr Protokoll schreibt.

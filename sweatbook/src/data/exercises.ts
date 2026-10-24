@@ -1,0 +1,166 @@
+import { isoNow, transaction, type Db } from "../db.ts";
+import { ConflictError, nameKey, newId, NotFoundError, tidy, toBool } from "./common.ts";
+
+// Which fields a set of this exercise has: kg + reps, time, or kg + time (weighted hang). Decides the set row in the UI
+// and what the API accepts for a set.
+export const METRICS = ["weight_reps", "duration", "weight_duration"] as const;
+export type Metrics = (typeof METRICS)[number];
+
+export type Exercise = {
+  id: string;
+  name: string;
+  metrics: Metrics;
+  note: string | null;
+  archived: boolean;
+  aliases: string[];
+  last_used_at: string | null;
+};
+
+export type ExerciseInput = { name: string; metrics: Metrics; note?: string | null; aliases?: string[] };
+export type ExercisePatch = { name?: string; metrics?: Metrics; note?: string | null; aliases?: string[]; archived?: boolean };
+
+type ExerciseRow = { id: string; name: string; metrics: Metrics; note: string | null; archived: number; last_used_at: string | null };
+
+const EXERCISE_SELECT = `
+  SELECT e.id, e.name, e.metrics, e.note, e.archived,
+    (SELECT MAX(s.started_at) FROM block_exercise be
+       JOIN block b ON b.id = be.block_id
+       JOIN session s ON s.id = b.session_id
+      WHERE be.exercise_id = e.id) AS last_used_at
+  FROM exercise e`;
+
+function aliasMap(db: Db, userId: string): Map<string, string[]> {
+  const rows = db.prepare("SELECT exercise_id, alias FROM exercise_alias WHERE user_id = ? ORDER BY alias").all(userId) as {
+    exercise_id: string;
+    alias: string;
+  }[];
+  const map = new Map<string, string[]>();
+  for (const r of rows) map.set(r.exercise_id, [...(map.get(r.exercise_id) ?? []), r.alias]);
+  return map;
+}
+
+const toExercise = (row: ExerciseRow, aliases: string[]): Exercise => ({
+  id: row.id,
+  name: row.name,
+  metrics: row.metrics,
+  note: row.note,
+  archived: toBool(row.archived),
+  aliases,
+  last_used_at: row.last_used_at,
+});
+
+// The whole catalog, archived ones included (flagged). Search matches name or alias anywhere, case ignored.
+// Most recently used first, never used ones after that by name.
+export function listExercises(db: Db, userId: string, query?: string): Exercise[] {
+  const aliases = aliasMap(db, userId);
+  const rows = db.prepare(`${EXERCISE_SELECT} WHERE e.user_id = ?`).all(userId) as ExerciseRow[];
+  const key = query ? nameKey(query) : "";
+  return rows
+    .map((r) => toExercise(r, aliases.get(r.id) ?? []))
+    .filter((e) => !key || [e.name, ...e.aliases].some((n) => nameKey(n).includes(key)))
+    .sort(
+      (a, b) =>
+        (b.last_used_at ?? "").localeCompare(a.last_used_at ?? "") || a.name.localeCompare(b.name, "de", { sensitivity: "base" }),
+    );
+}
+
+export function getExercise(db: Db, userId: string, id: string): Exercise {
+  const row = db.prepare(`${EXERCISE_SELECT} WHERE e.user_id = ? AND e.id = ?`).get(userId, id) as ExerciseRow | undefined;
+  if (!row) throw new NotFoundError("exercise");
+  return toExercise(row, aliasMap(db, userId).get(id) ?? []);
+}
+
+// Aliases cleaned up: spaces collapsed, duplicates and the exercise's own name dropped.
+function cleanAliases(name: string, aliases: string[]): string[] {
+  const seen = new Set([nameKey(name)]);
+  const result: string[] = [];
+  for (const alias of aliases.map(tidy)) {
+    if (!seen.has(nameKey(alias))) {
+      seen.add(nameKey(alias));
+      result.push(alias);
+    }
+  }
+  return result;
+}
+
+// A name or alias may stand for one exercise only, across names and aliases of the user's whole catalog.
+function assertFree(db: Db, userId: string, texts: string[], exceptId: string | null): void {
+  const taken = new Map<string, string>();
+  const names = db.prepare("SELECT id, name AS text FROM exercise WHERE user_id = ?").all(userId) as { id: string; text: string }[];
+  const aliases = db.prepare("SELECT exercise_id AS id, alias AS text FROM exercise_alias WHERE user_id = ?").all(userId) as {
+    id: string;
+    text: string;
+  }[];
+  for (const t of [...names, ...aliases]) if (t.id !== exceptId) taken.set(nameKey(t.text), t.text);
+  for (const text of texts) {
+    const clash = taken.get(nameKey(text));
+    if (clash) throw new ConflictError("name taken", { name: text, taken_by: clash });
+  }
+}
+
+function writeAliases(db: Db, userId: string, exerciseId: string, aliases: string[]): void {
+  db.prepare("DELETE FROM exercise_alias WHERE exercise_id = ?").run(exerciseId);
+  const insert = db.prepare("INSERT INTO exercise_alias (exercise_id, user_id, alias) VALUES (?, ?, ?)");
+  for (const alias of aliases) insert.run(exerciseId, userId, alias);
+}
+
+export function createExercise(db: Db, userId: string, input: ExerciseInput): Exercise {
+  const name = tidy(input.name);
+  const aliases = cleanAliases(name, input.aliases ?? []);
+  const id = newId();
+  transaction(db, () => {
+    assertFree(db, userId, [name, ...aliases], null);
+    db.prepare("INSERT INTO exercise (id, user_id, name, metrics, note, archived, created_at) VALUES (?, ?, ?, ?, ?, 0, ?)").run(
+      id,
+      userId,
+      name,
+      input.metrics,
+      input.note ?? null,
+      isoNow(),
+    );
+    writeAliases(db, userId, id, aliases);
+  });
+  return getExercise(db, userId, id);
+}
+
+export function hasSets(db: Db, exerciseId: string): boolean {
+  const row = db
+    .prepare("SELECT 1 AS x FROM set_log l JOIN block_exercise be ON be.id = l.block_exercise_id WHERE be.exercise_id = ? LIMIT 1")
+    .get(exerciseId);
+  return row !== undefined;
+}
+
+// Fields left out stay as they are; `aliases` replaces the whole list.
+export function updateExercise(db: Db, userId: string, id: string, patch: ExercisePatch): Exercise {
+  transaction(db, () => {
+    const current = getExercise(db, userId, id);
+    const name = patch.name !== undefined ? tidy(patch.name) : current.name;
+    const aliases = cleanAliases(name, patch.aliases ?? current.aliases);
+    if (patch.name !== undefined || patch.aliases !== undefined) assertFree(db, userId, [name, ...aliases], id);
+    // Old sets would no longer fit the columns of the new kind.
+    if (patch.metrics !== undefined && patch.metrics !== current.metrics && hasSets(db, id)) {
+      throw new ConflictError("exercise has sets");
+    }
+    db.prepare("UPDATE exercise SET name = ?, metrics = ?, note = ?, archived = ? WHERE id = ?").run(
+      name,
+      patch.metrics ?? current.metrics,
+      patch.note !== undefined ? patch.note : current.note,
+      (patch.archived ?? current.archived) ? 1 : 0,
+      id,
+    );
+    writeAliases(db, userId, id, aliases);
+  });
+  return getExercise(db, userId, id);
+}
+
+// Exercises are never deleted while sets point at them (ON DELETE RESTRICT): archive instead. An unused one may go.
+export function deleteExercise(db: Db, userId: string, id: string): void {
+  getExercise(db, userId, id);
+  const used = db.prepare("SELECT 1 AS x FROM block_exercise WHERE exercise_id = ? LIMIT 1").get(id);
+  if (used) throw new ConflictError("exercise in use");
+  db.prepare("DELETE FROM exercise WHERE id = ?").run(id);
+}
+
+export function assertUsable(exercise: Exercise): void {
+  if (exercise.archived) throw new ConflictError("exercise archived");
+}

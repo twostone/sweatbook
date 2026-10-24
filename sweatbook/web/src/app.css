@@ -1,0 +1,29 @@
+/* Light and dark follow the system setting; every color is a variable so both themes come from one set of components.
+   Values from the "sportlich-kräftig" mockups. */
+:root {
+  --bg: #f2f3f0;
+  --surface: #ffffff;
+  --ink: #0b0c0e;
+  --muted: #5a606a;
+  --line: #daddd6;
+  --accent: #d7ff3f; /* only as a fill with dark text on light backgrounds */
+  --accent-ink: #3f5a00; /* accent as text or thin line on light backgrounds */
+  --on-accent: #0b0c0e;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0b0c0e;
+    --surface: #17191d;
+    --ink: #f4f5f7;
+    --muted: #a1a7b0;
+    --line: #2c3036;
+    --accent-ink: #d7ff3f;
+  }
+}
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: system-ui, sans-serif;
+}

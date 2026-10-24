@@ -4,6 +4,8 @@
   import BlockView from "./BlockView.svelte";
   import CatalogView from "./CatalogView.svelte";
   import ExerciseView from "./ExerciseView.svelte";
+  import HistoryView from "./HistoryView.svelte";
+  import LogSessionSheet from "./LogSessionSheet.svelte";
   import NewExerciseView from "./NewExerciseView.svelte";
   import SessionSheet from "./SessionSheet.svelte";
   import SessionView from "./SessionView.svelte";
@@ -41,6 +43,8 @@
     <StartView />
   {:else if route.name === "new-exercise"}
     <NewExerciseView prefill={route.prefill} fromSheet={route.fromSheet} />
+  {:else if route.name === "history"}
+    <HistoryView />
   {:else if route.name === "catalog"}
     <CatalogView />
   {:else if route.name === "exercise"}
@@ -64,6 +68,8 @@
   <AddExerciseSheet sheet={app.sheet} />
 {:else if app.sheet.kind === "session" && app.session}
   <SessionSheet session={app.session} />
+{:else if app.sheet.kind === "log-session"}
+  <LogSessionSheet />
 {:else if app.sheet.kind === "block-menu" && app.session}
   <BlockMenuSheet session={app.session} blockId={app.sheet.blockId} />
 {/if}

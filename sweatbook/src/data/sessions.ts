@@ -26,7 +26,7 @@ export type SessionExercise = {
 export type SessionBlock = { id: string; position: number; type: "straight" | "superset"; exercises: SessionExercise[] };
 export type SessionTree = Omit<SessionSummary, "block_count" | "set_count"> & { blocks: SessionBlock[] };
 
-export type SessionInput = { title?: string | null; started_at?: string; note?: string | null };
+export type SessionInput = { title?: string | null; started_at?: string; ended_at?: string; note?: string | null };
 export type SessionPatch = { title?: string | null; started_at?: string; ended_at?: string | null; note?: string | null };
 
 type SessionRow = { id: string; title: string | null; started_at: string; ended_at: string | null; note: string | null };
@@ -73,16 +73,21 @@ function endOtherOpenSessions(db: Db, userId: string, exceptId: string): void {
   ).run(userId, exceptId);
 }
 
+// A session given an end is one entered afterwards: it is done at once, so it leaves an open session running.
 export function createSession(db: Db, userId: string, input: SessionInput): SessionTree {
   const id = newId();
   const now = isoNow();
+  const startedAt = input.started_at ?? now;
+  const endedAt = input.ended_at ?? null;
+  if (endedAt !== null && endedAt < startedAt) throw new InvalidError("ended_at before started_at");
   transaction(db, () => {
-    endOtherOpenSessions(db, userId, id);
-    db.prepare("INSERT INTO session (id, user_id, title, started_at, ended_at, note, created_at) VALUES (?, ?, ?, ?, NULL, ?, ?)").run(
+    if (endedAt === null) endOtherOpenSessions(db, userId, id);
+    db.prepare("INSERT INTO session (id, user_id, title, started_at, ended_at, note, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)").run(
       id,
       userId,
       input.title ?? null,
-      input.started_at ?? now,
+      startedAt,
+      endedAt,
       input.note ?? null,
       now,
     );

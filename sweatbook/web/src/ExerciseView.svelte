@@ -14,6 +14,7 @@
   let entries = $state<HistoryEntry[]>([]);
   let more = $state(false); // the last page was full, so older sessions may exist
   let saved = $state(false);
+  let loadingMore = $state(false); // a second tap must not load the same page twice
   let confirmDelete = $state(false);
   const PAGE = 10; // sessions per load of the history
 
@@ -24,12 +25,16 @@
     });
   });
 
-  const loadMore = () =>
-    guard(async () => {
+  async function loadMore() {
+    if (loadingMore) return;
+    loadingMore = true;
+    await guard(async () => {
       const older = await api.exerciseHistory(exerciseId, entries.at(-1)?.started_at, PAGE);
       entries = [...entries, ...older];
       more = older.length === PAGE;
     });
+    loadingMore = false;
+  }
 
   async function save(input: ExerciseInput) {
     exercise = await api.updateExercise(exerciseId, input);
@@ -111,7 +116,7 @@
         <p class="muted">Noch keine Sätze.</p>
       {/each}
       {#if more}
-        <button type="button" class="btn" onclick={loadMore}>Mehr laden</button>
+        <button type="button" class="btn" disabled={loadingMore} onclick={loadMore}>Mehr laden</button>
       {/if}
     {/if}
   </main>

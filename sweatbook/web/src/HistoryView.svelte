@@ -10,15 +10,19 @@
   let sessions = $state<SessionSummary[]>([]);
   let more = $state(false); // the last page was full, so older sessions may exist
   let loaded = $state(false);
+  let busy = $state(false); // a second tap must not load the same page twice
   const PAGE = 20; // sessions per load
 
   async function load(before?: string) {
+    if (busy) return;
+    busy = true;
     await guard(async () => {
       const page = await api.listSessions(PAGE, before);
       sessions = before ? [...sessions, ...page] : page;
       more = page.length === PAGE;
     });
     loaded = true;
+    busy = false;
   }
 
   $effect(() => {
@@ -39,7 +43,7 @@
       {#if loaded}<p class="empty">Noch keine Sessions.</p>{/if}
     {/each}
     {#if more}
-      <button type="button" class="btn" onclick={() => load(sessions.at(-1)?.started_at)}>Mehr laden</button>
+      <button type="button" class="btn" disabled={busy} onclick={() => load(sessions.at(-1)?.started_at)}>Mehr laden</button>
     {/if}
   </main>
 </div>

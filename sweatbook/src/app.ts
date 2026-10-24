@@ -50,7 +50,8 @@ const setsBody = z.object({ sets: z.array(z.object(setFields)).min(1).max(MAX_SE
 const setPatch = z.object(setFields);
 const roundBody = z.object({ sets: z.array(z.object({ ...setFields, block_exercise_id: id })).min(1).max(MAX_EXERCISES_PER_BLOCK) });
 
-const sessionBody = z.object({ title: optionalText(100), started_at: isoTime.optional(), note: optionalText(1000) });
+// ended_at: a training entered afterwards, done at once (it then leaves an open session running).
+const sessionBody = z.object({ title: optionalText(100), started_at: isoTime.optional(), ended_at: isoTime.optional(), note: optionalText(1000) });
 const sessionPatch = z.object({
   title: optionalText(100),
   started_at: isoTime.optional(),

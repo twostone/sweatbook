@@ -101,13 +101,12 @@ export const startSession = () =>
     navigate(paths.session(tree.id));
   });
 
-// A past training entered afterwards: it starts at the given time and is ended right away (at its start, the only time
-// known), so it neither shows as running nor ends at "now" when "Fertig" is tapped. It stays fully editable.
-// Creating it ends an open session (server rule: one open session).
+// A past training entered afterwards: created already ended (at its start, the only time known), so it neither shows
+// as running nor ends at "now" when "Fertig" is tapped, and an open session keeps running. It stays fully editable.
 export const logPastSession = (startedAt: string, title: string) =>
   guard(async () => {
-    const created = await api.createSession({ started_at: startedAt, title: title.trim() || null });
-    setSession(await api.updateSession(created.id, { ended_at: startedAt }));
+    const created = await api.createSession({ started_at: startedAt, ended_at: startedAt, title: title.trim() || null });
+    setSession(created);
     closeSheetThen(() => navigate(paths.session(created.id)));
   });
 

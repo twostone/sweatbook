@@ -71,3 +71,14 @@ test("session: other users see nothing", async () => {
   await ben("POST", "/api/sessions", {});
   assert.equal((await as("anna")("GET", `/api/sessions/${s.id}`)).json.ended_at, null);
 });
+
+test("session: entered afterwards with ended_at, it is done at once and leaves the open one running", async () => {
+  const { call } = setup();
+  const running = (await call("POST", "/api/sessions", {})).json;
+  const past = await call("POST", "/api/sessions", { title: "Nachgetragen", started_at: "2026-10-20T18:30:00+02:00", ended_at: "2026-10-20T19:30:00+02:00" });
+  assert.equal(past.status, 201);
+  assert.equal(past.json.ended_at, "2026-10-20T17:30:00.000Z");
+  assert.equal((await call("GET", `/api/sessions/${running.id}`)).json.ended_at, null);
+  const bad = await call("POST", "/api/sessions", { started_at: "2026-10-20T18:30:00Z", ended_at: "2026-10-20T18:00:00Z" });
+  assert.equal(bad.status, 400);
+});

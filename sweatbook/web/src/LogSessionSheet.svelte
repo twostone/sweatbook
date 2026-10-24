@@ -6,7 +6,6 @@
   // Enter a training afterwards: when it was and optionally its name. The sets follow on its pages as usual.
   let startedAt = $state(toLocalInput(new Date().toISOString()));
   let title = $state("");
-  const open = $derived(app.sessions.find((s) => s.ended_at === null));
 
   async function save(e: SubmitEvent) {
     e.preventDefault();
@@ -25,9 +24,6 @@
     <input id="log-start" class="field" type="datetime-local" required bind:value={startedAt} />
     <label class="label" for="log-title">Titel</label>
     <input id="log-title" class="field" placeholder="Training" maxlength="100" bind:value={title} />
-    {#if open}
-      <p class="warn">Die laufende Session „{open.title ?? "Training"}“ wird dabei beendet.</p>
-    {/if}
     <button type="submit" class="btn big primary">Anlegen</button>
   </form>
 </Sheet>
@@ -43,10 +39,5 @@
   }
   .form .btn {
     margin-top: 8px;
-  }
-  .warn {
-    margin: 4px 0 0;
-    color: var(--danger);
-    font-weight: 600;
   }
 </style>

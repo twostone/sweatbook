@@ -67,7 +67,8 @@ set_log         Satz: weight_kg (null = Körpergewicht), reps, duration_s, is_ma
 - **Übungen werden archiviert, nicht gelöscht**, sobald sie benutzt sind (`ON DELETE RESTRICT`, API 409). Archivierte
   lassen sich nicht in neue Blöcke aufnehmen (409).
 - **Nur eine offene Session pro Nutzer:** Eine neue Session (oder das Wiederöffnen per `ended_at: null`) beendet die
-  anderen, beim Zeitpunkt ihres letzten Satzes, ohne Sätze bei ihrem Start. Beendete Sessions bleiben voll bearbeitbar.
+  anderen, beim Zeitpunkt ihres letzten Satzes, ohne Sätze bei ihrem Start. Ausnahme: Eine nachgetragene Session (beim
+  Anlegen mit `ended_at`) ist sofort beendet und lässt die offene laufen. Beendete Sessions bleiben voll bearbeitbar.
 - **Blocktyp folgt der Anzahl der Übungen** (eine = `straight`, mehrere = `superset`). Die letzte Übung nimmt den Block mit.
 - **„Letztes Mal“** (`last_time`) ist die jüngste Session mit Sätzen dieser Übung, die **vor** der Start­zeit der aktuellen
   begann (nicht die zuletzt eingetragene). So zeigt auch eine nachgetragene Session das Richtige.
@@ -106,7 +107,7 @@ Gespeichertem). Optionale Textfelder: `""` und `null` löschen, fehlt das Feld, 
 | `GET`, `PATCH`, `DELETE /api/exercises/:id` | lesen, ändern (`aliases` ersetzt die Liste, `archived`), löschen nur unbenutzt |
 | `GET /api/exercises/:id/history?before=&limit=` | Sätze nach Sessions, neueste zuerst |
 | `GET /api/sessions?before=&limit=` | Liste mit `block_count`, `set_count` |
-| `POST /api/sessions` | neue Session (`title`, `started_at`, `note`), beendet die offene |
+| `POST /api/sessions` | neue Session (`title`, `started_at`, `note`), beendet die offene; mit `ended_at` nachgetragen |
 | `GET`, `PATCH`, `DELETE /api/sessions/:id` | ganzer Baum inkl. `last_time`; ändern (`ended_at: null` öffnet wieder) |
 | `POST /api/sessions/:id/blocks` | neuer Block mit einer Übung |
 | `PUT /api/sessions/:id/block-order` | Reihenfolge (alle Block-IDs genau einmal) |
@@ -150,7 +151,8 @@ Actions to create and approve pull requests“.
 - **Client-Logik** ohne DOM gehört nach `web/src/logic/` (Importe dort mit `.ts`-Endung) und bekommt Tests in
   `test/web-*.test.ts`. Typen der API spiegelt `web/src/types.ts`.
 - **Design „sportlich-kräftig“**, helles und dunkles Theme folgen `prefers-color-scheme`; alle Farben als CSS-Variablen
-  (`web/src/app.css`). Limettengrün im hellen Theme nur als Fläche mit dunkler Schrift, als Text das dunkle Oliv.
+  (`web/src/app.css`). Schriften Barlow und Barlow Condensed selbst gehostet über `@fontsource/*` (kein CDN aus dem
+  Ingress-Iframe). Limettengrün im hellen Theme nur als Fläche mit dunkler Schrift, als Text das dunkle Oliv.
 - **APIs und Schnittstellen vor der Nutzung gegen die aktuelle Dokumentation prüfen** (HA-App-Konfiguration, Hono,
   zod, Svelte, Vite, Node). HA nennt Add-ons inzwischen „Apps“.
 - Neue Backend-Logik bekommt Tests in `test/` (`app.request(...)` mit `node:test`, Helfer in `test/helpers.ts`).
@@ -164,8 +166,9 @@ Actions to create and approve pull requests“.
 
 - Phase 1 ist gebaut: Backend und Oberfläche (Start mit Nachtragen, Verlauf, Session-Übersicht, Übung, Supersatz, Sheet
   „Übung hinzufügen“, Übungskatalog mit Anlegen und Detail).
-- Nachgetragene Sessions werden sofort beendet (`ended_at` = Beginn, der einzige bekannte Zeitpunkt). Eine laufende
-  Session endet beim Nachtragen (Regel „nur eine offene Session“); das Sheet warnt davor. Mockups und Konzept liegen
+- Nachgetragene Sessions legt der Start mit `ended_at` = Beginn an (der einzige bekannte Zeitpunkt).
+- Der Start erkennt die offene Session unter den neuesten (`START_SESSIONS` in `store.svelte.ts`). Eine ältere offene
+  (nur per API wiedergeöffnet) zeigt er nicht. Mockups und Konzept liegen
   außerhalb des Repos.
 - Nicht am echten System geprüft: Ingress-Header, Start in Home Assistant, ob die Companion-App `prefers-color-scheme`
   an die eingebettete Seite weitergibt.

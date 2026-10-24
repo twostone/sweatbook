@@ -28,17 +28,15 @@ export function formatSet(set: SetLog, fields: readonly Field[]): string {
   return formatSetValue(set, fields) + maxSuffix([set]);
 }
 
-// kg + reps reads "100 kg × 5" (KG = bodyweight); everything else lists its values, the weight after an @.
+// A set with only reps reads "100 kg × 5" (KG = bodyweight), also when the exercise has more fields; everything else
+// lists its values ("5 Wdh. · 0:45"), the weight after an @.
 function formatSetValue(set: SetLog, fields: readonly Field[]): string {
-  const valueFields = valueFieldsOf(fields);
+  const filled = valueFieldsOf(fields).filter((f) => fieldValue(set, f) !== null);
   const hasWeight = fields.includes("weight");
-  if (valueFields.length === 1 && valueFields[0] === "reps") {
+  if (filled.length === 1 && filled[0] === "reps") {
     return hasWeight ? `${weightLabel(set.weight_kg)} × ${set.reps}` : `${set.reps} Wdh.`;
   }
-  const parts = valueFields.flatMap((f) => {
-    const value = fieldValue(set, f);
-    return value === null ? [] : [valueText(f, value)];
-  });
+  const parts = filled.map((f) => (f === "reps" ? `${set.reps} Wdh.` : valueText(f, fieldValue(set, f)!)));
   const weight = hasWeight && set.weight_kg !== null ? ` @ ${formatKg(set.weight_kg)} kg` : "";
   return parts.join(" · ") + weight;
 }

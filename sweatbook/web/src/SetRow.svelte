@@ -44,7 +44,7 @@
   const placeholder: Record<RowField, string> = { kg: "KG", reps: "–", dist: "m", time: "0:00" };
 </script>
 
-<div class="row" class:draft class:due class:two={fields.length === 2} class:three={fields.length === 3}>
+<div class="row set-grid" class:draft class:due class:dense={fields.length === 3} class:denser={fields.length >= 4} style:--fields={fields.length}>
   <span class="idx" aria-hidden="true">{index}</span>
   {#each fields as field (field)}
     <input
@@ -96,20 +96,14 @@
 
 <style>
   .row {
-    display: grid;
-    grid-template-columns: var(--set-cols-1);
-    gap: 6px;
     align-items: center;
   }
-  .row.two {
-    grid-template-columns: var(--set-cols-2);
+  /* Three or four fields (kg, distance, time …) share the width of two: smaller digits so "12:30" still fits. */
+  .dense .num {
+    font-size: 20px;
   }
-  /* Three fields (kg, distance, time) share the width of two: smaller digits so "12:30" still fits. */
-  .row.three {
-    grid-template-columns: var(--set-cols-3);
-  }
-  .three .num {
-    font-size: 22px;
+  .denser .num {
+    font-size: 17px;
   }
   .idx {
     font: 800 22px var(--display);

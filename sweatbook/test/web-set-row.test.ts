@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { draftInput, rowFields, rowFromValues, valuesFromRow } from "../web/src/logic/set-row.ts";
+import { draftInput, restoreRow, rowFields, rowFromValues, valuesFromRow } from "../web/src/logic/set-row.ts";
 import type { Field } from "../web/src/types.ts";
 
 const WR: Field[] = ["weight", "reps"];
@@ -48,4 +48,10 @@ test("a draft row becomes a set with MAX and note, an empty note is none", () =>
     set: { ...values(100, 5, null), is_max: true, note: null },
   });
   assert.deepEqual(draftInput({ ...row("", "", ""), is_max: false, note: "x" }, WR), { ok: false, field: "reps" });
+});
+
+test("a row stored before a field existed gets that field from the fresh row", () => {
+  const stored = { kg: "100", reps: "5", time: "" };
+  assert.deepEqual(restoreRow(stored, row("", "", "", "")), row("100", "5", "", ""));
+  assert.deepEqual(restoreRow(null, row("80", "8", "")), row("80", "8", ""));
 });

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { untrack } from "svelte";
   import SetRow from "./SetRow.svelte";
-  import { rowFromValues, valuesFromRow, type RowField, type RowText } from "./logic/set-row";
+  import { restoreRow, rowFromValues, valuesFromRow, type RowField, type RowText } from "./logic/set-row";
   import * as storage from "./storage";
   import { deleteSet, updateSet } from "./store.svelte";
   import type { Field, SetLog } from "./types";
@@ -16,8 +16,7 @@
   const initial = untrack(() => set);
   const key = `row:edit:${initial.id}`;
   const stored = storage.load<Edit>(key);
-  // An edit stored before a field existed lacks it: the set's own values fill the gaps.
-  let text = $state<RowText>({ ...rowFromValues(initial), ...stored });
+  let text = $state<RowText>(restoreRow(stored, rowFromValues(initial)));
   let isMax = $state(stored?.is_max ?? initial.is_max);
   let note = $state(stored?.note ?? initial.note ?? "");
   let invalid = $state<RowField | null>(null);

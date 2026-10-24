@@ -63,6 +63,7 @@ test("exercise: update; fields can be added any time, removed only while no set 
   const removeUsed = await call("PATCH", `/api/exercises/${e.id}`, { fields: ["weight", "reps"] });
   assert.equal(removeUsed.status, 409);
   assert.equal(removeUsed.json.field, "duration");
+  assert.deepEqual(removeUsed.json.fields, ["duration"], "every field still holding values is named");
   // kg was never filled in: it may go; distance may be added next to the used time
   assert.deepEqual((await call("PATCH", `/api/exercises/${e.id}`, { fields: ["duration", "distance"] })).json.fields, ["distance", "duration"]);
   assert.equal((await call("PATCH", `/api/exercises/${e.id}`, { fields: ["duration"], aliases: [] })).json.aliases.length, 0);

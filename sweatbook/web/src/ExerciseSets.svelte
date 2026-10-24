@@ -8,7 +8,7 @@
   import { parseQuickEntry, quickEntryExample, quickEntryField } from "./logic/quick-entry";
   import type { RowField } from "./logic/set-row";
   import { addSets } from "./store.svelte";
-  import type { SessionExercise } from "./types";
+  import type { Field, SessionExercise } from "./types";
 
   // The sets of one exercise in a block: logged sets, the highlighted "next set" row and "+ Satz". In a superset the
   // block owns the drafts (bound here) so "+ Runde" can send all of them at once.
@@ -60,8 +60,8 @@
 
   // Only exercises with a single value field have a quick entry (kg + reps, time, distance, …).
   const quickExample = $derived(quickEntryExample(fields));
-  const QUICK_VALUE_NAME = { reps: "Wdh.", duration: "Zeit", distance: "Meter", weight: "" } as const;
-  const quickValueName = $derived(QUICK_VALUE_NAME[quickEntryField(fields) ?? "weight"]);
+  const QUICK_VALUE_NAME: Partial<Record<Field, string>> = { reps: "Wdh.", duration: "Zeit", distance: "Meter" };
+  const quickValueName = $derived(QUICK_VALUE_NAME[quickEntryField(fields) ?? "reps"]);
 </script>
 
 {#if be.last_time}
@@ -72,7 +72,7 @@
 {/if}
 
 <div class="sets">
-  <div class="heads" class:two={fields.length === 2} class:three={fields.length === 3} aria-hidden="true">
+  <div class="heads set-grid" style:--fields={fields.length} aria-hidden="true">
     <span></span>
     {#each headings(fields) as h (h)}<span>{h}</span>{/each}
     <span>Max</span><span></span>
@@ -152,21 +152,12 @@
     gap: 8px;
   }
   .heads {
-    display: grid;
-    grid-template-columns: var(--set-cols-1);
-    gap: 6px;
     font-weight: 700;
     font-size: 11px;
     letter-spacing: 0.12em;
     text-transform: uppercase;
     color: var(--muted);
     text-align: center;
-  }
-  .heads.two {
-    grid-template-columns: var(--set-cols-2);
-  }
-  .heads.three {
-    grid-template-columns: var(--set-cols-3);
   }
   .hint {
     margin: 0 0 0 30px;

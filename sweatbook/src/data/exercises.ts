@@ -171,9 +171,8 @@ export function updateExercise(db: Db, userId: string, id: string, patch: Exerci
     if (patch.name !== undefined || patch.aliases !== undefined) assertFree(db, userId, [name, ...aliases], id);
     // A field may be added any time (old sets leave it empty); it may only go while no set has a value in it.
     const fields = patch.fields !== undefined ? normalizeFields(patch.fields) : current.fields;
-    for (const field of current.fields.filter((f) => !fields.includes(f))) {
-      if (fieldInUse(db, id, field)) throw new ConflictError("field in use", { field });
-    }
+    const kept = current.fields.filter((f) => !fields.includes(f) && fieldInUse(db, id, f));
+    if (kept.length) throw new ConflictError("field in use", { field: kept[0], fields: kept });
     db.prepare(
       `UPDATE exercise SET name = ?, has_weight = ?, has_reps = ?, has_distance = ?, has_duration = ?, note = ?, archived = ?
        WHERE id = ?`,

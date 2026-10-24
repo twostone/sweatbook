@@ -37,6 +37,8 @@ test("several value fields, distance", () => {
   assert.equal(formatSet(log(24, null, 45, false, 60), FARMER), "60 m · 0:45 @ 24 kg");
   assert.equal(formatSet(log(null, null, null, false, 60), FARMER), "60 m");
   assert.equal(formatSet(log(null, 12, null), ["reps"]), "12 Wdh.");
+  assert.equal(formatSet(log(100, 5, 45), ["weight", "reps", "duration"]), "5 Wdh. · 0:45 @ 100 kg");
+  assert.equal(formatSet(log(100, 5, null), ["weight", "reps", "duration"]), "100 kg × 5", "only reps filled reads as before");
   assert.equal(summarize([log(24, null, 45, false, 60), log(24, null, 50, false, 60)], FARMER), "60 m · 0:45 @ 24 kg, 60 m · 0:50 @ 24 kg");
   assert.equal(
     summarize([log(24, null, 45, false, 60), log(24, null, 50, false, 60), log(32, null, 40, false, 60), log(24, null, 55, false, 60)], FARMER),

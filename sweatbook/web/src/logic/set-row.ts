@@ -40,6 +40,9 @@ export function valuesFromRow(row: RowText, fields: readonly Field[]): { ok: tru
   return { ok: true, values: { weight_kg: parsed.weight, reps: parsed.reps, duration_s: parsed.duration, distance_m: parsed.distance } };
 }
 
+// A row kept in localStorage before a field existed lacks it: the fresh row fills the gaps.
+export const restoreRow = <T extends object>(stored: Partial<T> | null, fresh: T): T => ({ ...fresh, ...stored });
+
 // The "next set" row as typed, plus MAX and note.
 export type DraftRow = RowText & { is_max: boolean; note: string };
 

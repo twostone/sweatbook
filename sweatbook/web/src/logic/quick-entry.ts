@@ -52,7 +52,7 @@ const EXAMPLE: Record<"reps" | "distance" | "duration", { value: string; kg: str
   distance: { value: "3×400m", kg: "3×60m@24" },
 };
 export function quickEntryExample(fields: readonly Field[]): string | null {
-  const field = quickEntryField(fields);
-  if (!field || field === "weight") return null;
+  const field = quickEntryField(fields) as keyof typeof EXAMPLE | null; // a value field, never kg
+  if (!field) return null;
   return fields.includes("weight") ? EXAMPLE[field].kg : EXAMPLE[field].value;
 }

@@ -1,5 +1,5 @@
 import { draftFor } from "./logic/prefill.ts";
-import { rowFields, rowFromValues, type DraftRow, type RowField } from "./logic/set-row.ts";
+import { restoreRow, rowFields, rowFromValues, type DraftRow, type RowField } from "./logic/set-row.ts";
 import { load, remove, save } from "./storage";
 import type { Field, SessionExercise } from "./types";
 
@@ -10,8 +10,7 @@ export { draftInput, type DraftRow } from "./logic/set-row.ts";
 const key = (be: SessionExercise) => `row:draft:${be.id}`;
 
 export const freshDraft = (be: SessionExercise): DraftRow => ({ ...rowFromValues(draftFor(be)), is_max: false, note: "" });
-// A stored draft from before a field existed lacks it: the fresh draft fills the gaps.
-export const initialDraft = (be: SessionExercise): DraftRow => ({ ...freshDraft(be), ...(load<Partial<DraftRow>>(key(be)) ?? {}) });
+export const initialDraft = (be: SessionExercise): DraftRow => restoreRow(load<Partial<DraftRow>>(key(be)), freshDraft(be));
 export const keepDraft = (be: SessionExercise, draft: DraftRow) => save(key(be), draft);
 export const dropDraft = (be: SessionExercise) => remove(key(be));
 

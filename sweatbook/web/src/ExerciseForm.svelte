@@ -78,10 +78,10 @@
         // A taken name and a field that still holds values are shown in place; anything else goes to the error bar.
         if (err instanceof ApiError && err.status === 409 && typeof err.detail.taken_by === "string") takenBy = err.detail.taken_by;
         else if (err instanceof ApiError && err.status === 409 && typeof err.detail.field === "string") {
-          // The field stays on the server, so it goes back into the selection too.
-          const field = err.detail.field as Field;
-          fieldInUse = OPTIONS.find((o) => o.value === field)?.label ?? field;
-          if (!fields.includes(field)) toggle(field);
+          // Those fields stay on the server, so they go back into the selection too.
+          const kept = (Array.isArray(err.detail.fields) ? err.detail.fields : [err.detail.field]) as Field[];
+          fieldInUse = kept.map((f) => OPTIONS.find((o) => o.value === f)?.label ?? f).join("“, „");
+          for (const field of kept) if (!fields.includes(field)) toggle(field);
         } else throw err;
       }
     });
@@ -116,7 +116,7 @@
         {/each}
       </div>
       {#if fieldInUse}
-        <p class="warn" role="alert">„{fieldInUse}“ hat schon Werte in Sätzen und bleibt.</p>
+        <p class="warn" role="alert">„{fieldInUse}“ {fieldInUse.includes(",") ? "haben" : "hat"} schon Werte in Sätzen und {fieldInUse.includes(",") ? "bleiben" : "bleibt"}.</p>
       {:else if !hasValueField}
         <p class="warn">Mindestens Wdh., Strecke oder Zeit wählen.</p>
       {:else}

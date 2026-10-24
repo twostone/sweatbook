@@ -1,4 +1,4 @@
-import type { Metrics, SetValues } from "../types.ts";
+import type { Metrics, SetInput, SetValues } from "../types.ts";
 import { formatKg } from "./format.ts";
 import { formatDuration, parseDuration, parseKg, parseReps } from "./numbers.ts";
 
@@ -29,4 +29,14 @@ export function valuesFromRow(row: RowText, metrics: Metrics): { ok: true; value
   const time = fields.includes("time") ? parseDuration(row.time) : null;
   if (time === undefined || (fields.includes("time") && time === null)) return { ok: false, field: "time" };
   return { ok: true, values: { weight_kg: kg, reps, duration_s: time } };
+}
+
+// The "next set" row as typed, plus MAX and note.
+export type DraftRow = RowText & { is_max: boolean; note: string };
+
+// A draft row as the set the API takes; an empty note is no note.
+export function draftInput(draft: DraftRow, metrics: Metrics): { ok: true; set: SetInput } | { ok: false; field: RowField } {
+  const parsed = valuesFromRow(draft, metrics);
+  if (!parsed.ok) return parsed;
+  return { ok: true, set: { ...parsed.values, is_max: draft.is_max, note: draft.note.trim() || null } };
 }

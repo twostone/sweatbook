@@ -1,8 +1,8 @@
 <script lang="ts">
   import Sheet from "./Sheet.svelte";
   import * as api from "./api";
-  import { paths } from "./router.svelte";
-  import { changeSession, closeSheet, closeSheetAndNavigate, openSheet } from "./store.svelte";
+  import { goUp, paths } from "./router.svelte";
+  import { changeSession, closeSheet, closeSheetThen, openSheet } from "./store.svelte";
   import type { SessionTree } from "./types";
 
   // The "…" menu of a block: make it a superset, take an exercise out, remove the block.
@@ -18,12 +18,12 @@
   async function removeExercise(blockExerciseId: string) {
     const last = block?.exercises.length === 1;
     if (!(await changeSession(() => api.removeBlockExercise(blockExerciseId)))) return;
-    if (last) closeSheetAndNavigate(paths.session(session.id));
+    if (last) closeSheetThen(() => goUp(paths.session(session.id)));
     else closeSheet();
   }
 
   async function removeBlock() {
-    if (await changeSession(() => api.deleteBlock(blockId))) closeSheetAndNavigate(paths.session(session.id));
+    if (await changeSession(() => api.deleteBlock(blockId))) closeSheetThen(() => goUp(paths.session(session.id)));
   }
 </script>
 

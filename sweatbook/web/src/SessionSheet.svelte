@@ -3,11 +3,11 @@
   import Sheet from "./Sheet.svelte";
   import * as api from "./api";
   import { fromLocalInput, toLocalInput } from "./logic/dates";
-  import { paths } from "./router.svelte";
-  import { app, changeSession, closeSheet, closeSheetAndNavigate, guard } from "./store.svelte";
+  import { goUp, paths } from "./router.svelte";
+  import { app, changeSession, closeSheet, closeSheetThen, guard } from "./store.svelte";
   import type { SessionTree } from "./types";
 
-  // Title, start time and note of a session; also reopening and deleting it.
+  // Title, start time and note of a session; deleting it.
   let { session }: { session: SessionTree } = $props();
 
   // The form starts from the session as it is when the sheet opens.
@@ -28,18 +28,13 @@
     if (await changeSession(() => api.updateSession(session.id, { title: title.trim(), started_at: started, note: note.trim() }))) closeSheet();
   }
 
-  async function reopen() {
-    if (await changeSession(() => api.updateSession(session.id, { ended_at: null }))) closeSheet();
-  }
-
   async function remove() {
     if (
       await guard(async () => {
         await api.deleteSession(session.id);
       })
     ) {
-      app.session = null;
-      closeSheetAndNavigate(paths.start());
+      closeSheetThen(() => goUp(paths.start()));
     }
   }
 </script>
@@ -55,9 +50,6 @@
     <button type="submit" class="btn big primary">Speichern</button>
   </form>
   <div class="more">
-    {#if session.ended_at !== null}
-      <button type="button" class="btn" onclick={reopen}>Wieder öffnen</button>
-    {/if}
     {#if confirmDelete}
       <button type="button" class="btn danger" onclick={remove}>Wirklich löschen</button>
       <button type="button" class="btn" onclick={() => (confirmDelete = false)}>Abbrechen</button>

@@ -1,7 +1,7 @@
 <script lang="ts">
   import ExerciseSets from "./ExerciseSets.svelte";
   import Icon from "./Icon.svelte";
-  import { draftInput, dropDraft, fieldName, freshDraft, type DraftRow } from "./drafts";
+  import { draftInput, dropDraft, fieldName, freshDraft, keepDraft, type DraftRow } from "./drafts";
   import { blockLabel } from "./logic/format";
   import { nextBlock, nextInRound } from "./logic/flow";
   import { goUp, paths, replace } from "./router.svelte";
@@ -37,6 +37,7 @@
       sets.push({ ...input.set, block_exercise_id: be.id });
     }
     busy = true;
+    for (const be of block.exercises) keepDraft(be, $state.snapshot(drafts[be.id]!)); // survive a failed send
     if (await changeSession(() => api.addRound(block.id, sets))) {
       for (const be of app.session!.blocks[index]!.exercises) {
         dropDraft(be);
@@ -98,9 +99,9 @@
           <Icon name="arrow-right" />
         </button>
       {:else}
-        <button type="button" class="btn big grow" onclick={addAfter}><Icon name="plus" />Übung</button>
-        <button type="button" class="btn big primary grow" onclick={() => finishSession(session)}>
-          {session.ended_at === null ? "Beenden" : "Fertig"}
+        <button type="button" class="btn big grow two-line" onclick={addAfter}>Übung hinzufügen</button>
+        <button type="button" class="btn big primary grow two-line" onclick={() => finishSession(session)}>
+          {session.ended_at === null ? "Session beenden" : "Fertig"}
         </button>
       {/if}
     </footer>
@@ -154,6 +155,12 @@
   }
   .round {
     min-height: 56px;
+  }
+  /* The two end buttons share the row with "back": their labels may wrap. */
+  .two-line {
+    white-space: normal;
+    font-size: 19px;
+    line-height: 1;
   }
   .square {
     width: 60px;

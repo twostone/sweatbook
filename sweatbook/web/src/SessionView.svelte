@@ -155,7 +155,7 @@
   }
   .pill {
     min-height: var(--tap);
-    border-radius: 22px;
+    border-radius: calc(var(--tap) / 2);
     font-family: var(--font);
     font-size: 14px;
     font-weight: 700;

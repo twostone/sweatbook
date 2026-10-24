@@ -19,6 +19,7 @@ release-please-config.json, .release-please-manifest.json   Release-Automatik (V
 renovate.json            Renovate: Actions, npm, Node und Docker-Basisimage (gruppierte PRs)
 sweatbook/               die App (Docker-Build-Kontext)
   config.yaml            App-Konfiguration (Version pflegt Release Please)
+  icon.png               Icon im App-Store (128×128 PNG, aus web/public/favicon.svg erzeugt)
   translations/          de.yaml, en.yaml: Namen und Beschreibungen der Optionen
   Dockerfile             zweistufig, node:24-alpine
   src/                   Backend: Hono + node:sqlite
@@ -141,6 +142,9 @@ Actions to create and approve pull requests“.
 
 ## Regeln beim Ändern
 
+- **App-Icon:** `web/public/favicon.svg` ist die Quelle. `icon.png` (128×128, Dateiname von Home Assistant vorgegeben)
+  ist daraus abgeleitet und wird bei jeder Änderung am SVG neu erzeugt und mit eingecheckt
+  (`rsvg-convert -w 128 -h 128 web/public/favicon.svg -o icon.png`). Ein `logo.png` ist optional und bewusst nicht da.
 - **Frontend-URLs immer relativ** (`api/sessions`), nie `/api/...`: Die App läuft unter einem wechselnden Ingress-Präfix.
 - **Navigation:** Seiten über Hash-Routen (alle in `web/src/logic/routes.ts`: Start, `#/history`, `#/s/<id>`,
   `#/s/<id>/b/<id>`, `#/exercises`, `#/exercises/new`, `#/exercises/<id>`), Sheets belegen einen History-Eintrag ohne URL-Änderung
@@ -173,7 +177,6 @@ Actions to create and approve pull requests“.
   außerhalb des Repos.
 - Am echten Home Assistant geprüft (24.10.2026): Ingress-Header `X-Remote-User-*`, Start der App, `prefers-color-scheme`
   kommt in der Companion-App an (kein eigener Theme-Umschalter nötig). Noch offen: Android-Zahlentastatur bei kg und Zeit.
-- Kein `icon.png` für den App-Store (optional; aus `web/public/favicon.svg` erzeugen, wenn gewünscht).
 
 ## Git und Pull Requests
 

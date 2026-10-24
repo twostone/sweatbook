@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.2.0](https://github.com/twostone/sweatbook/compare/v1.1.0...v1.2.0) (2026-10-24)
+
+
+### Neu
+
+* App-Icon für den App-Store ([#10](https://github.com/twostone/sweatbook/issues/10)) ([637e5f5](https://github.com/twostone/sweatbook/commit/637e5f531bb7cd239fcc5a6aa73ee59731f94050))
+* Notiz je Übung im Training ([#8](https://github.com/twostone/sweatbook/issues/8)) ([16d9aa6](https://github.com/twostone/sweatbook/commit/16d9aa6356119efb979632becc288ea0c0da51ee))
+
 ## [1.1.0](https://github.com/twostone/sweatbook/compare/v1.0.0...v1.1.0) (2026-10-24)
 
 

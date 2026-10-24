@@ -28,13 +28,16 @@
   let quick = $state("");
   let quickInvalid = $state(false);
   let busy = $state(false);
+  let unsent = $state(false); // "+ Satz" failed: the row says so until it goes through
 
   async function addSet() {
     const input = draftInput(draft!, metrics);
     invalid = input.ok ? null : input.field;
     if (!input.ok || busy) return;
     busy = true;
-    if (await addSets(be.id, [input.set])) {
+    keepDraft(be, $state.snapshot(draft!));
+    unsent = !(await addSets(be.id, [input.set]));
+    if (!unsent) {
       dropDraft(be);
       draft = freshDraft(be);
     }
@@ -85,6 +88,8 @@
       draft
       due={highlight}
       {invalid}
+      unsaved={unsent}
+      onretry={addSet}
       onchange={() => keepDraft(be, $state.snapshot(draft!))}
       oninput={() => keepDraft(be, $state.snapshot(draft!))}
     />
@@ -145,7 +150,7 @@
   }
   .heads {
     display: grid;
-    grid-template-columns: 24px minmax(0, 1fr) 56px var(--tap);
+    grid-template-columns: var(--set-cols-1);
     gap: 6px;
     font-weight: 700;
     font-size: 11px;
@@ -155,7 +160,7 @@
     text-align: center;
   }
   .heads.two {
-    grid-template-columns: 24px minmax(0, 1fr) minmax(0, 1fr) 56px var(--tap);
+    grid-template-columns: var(--set-cols-2);
   }
   .hint {
     margin: 0 0 0 30px;

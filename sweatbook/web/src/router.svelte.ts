@@ -1,31 +1,9 @@
 // Hash routes, so the back button and a reload work on every level inside the HA ingress iframe (the iframe's
 // history entries share the tab's history). Relative API URLs are unaffected by the hash.
 
-export type Route =
-  | { name: "start" }
-  | { name: "session"; sessionId: string }
-  | { name: "block"; sessionId: string; blockId: string }
-  | { name: "new-exercise"; prefill: string };
+import { parseRoute, paths } from "./logic/routes";
 
-export const paths = {
-  start: () => "#/",
-  session: (sessionId: string) => `#/s/${sessionId}`,
-  block: (sessionId: string, blockId: string) => `#/s/${sessionId}/b/${blockId}`,
-  newExercise: (prefill: string) => `#/exercises/new?name=${encodeURIComponent(prefill)}`,
-};
-
-export function parseRoute(hash: string): Route {
-  const [path = "", query = ""] = hash.replace(/^#/, "").split("?");
-  const parts = path.split("/").filter(Boolean);
-  if (parts[0] === "s" && parts[1]) {
-    if (parts[2] === "b" && parts[3]) return { name: "block", sessionId: parts[1], blockId: parts[3] };
-    return { name: "session", sessionId: parts[1] };
-  }
-  if (parts[0] === "exercises" && parts[1] === "new") {
-    return { name: "new-exercise", prefill: new URLSearchParams(query).get("name") ?? "" };
-  }
-  return { name: "start" };
-}
+export { paths, type Route } from "./logic/routes";
 
 export const router = $state({ route: parseRoute(location.hash) });
 
@@ -43,22 +21,17 @@ export function replace(hash: string) {
   location.replace(hash);
 }
 
-// Up to a parent page: back if that is where we came from, else replace.
+// Up to an ancestor page: back as many steps as it lies behind us, so "back" never returns to the pages left (an
+// ended or deleted session, a removed block). Not in the trail (after a reload): replace.
 export function goUp(hash: string) {
-  if (trail.at(-1) === hash) {
-    trail.pop();
-    history.back();
-  } else {
+  const index = trail.lastIndexOf(hash);
+  if (index === -1) {
     replace(hash);
+    return;
   }
-}
-
-// Turns the current history entry (an open sheet's) into the page at `hash`: "back" then leads to where the sheet was
-// opened, and no pending history.back() can race the navigation.
-export function replaceEntry(hash: string) {
-  trail.push(location.hash || paths.start());
-  history.replaceState(null, "", hash);
-  syncRoute();
+  const steps = trail.length - index;
+  trail.length = index;
+  history.go(-steps);
 }
 
 function syncRoute() {

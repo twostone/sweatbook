@@ -48,7 +48,7 @@
     border-radius: 22px 22px 0 0;
   }
   dialog::backdrop {
-    background: rgb(0 0 0 / 0.5);
+    background: var(--scrim);
   }
   .sheet {
     padding: 12px 16px max(16px, env(safe-area-inset-bottom));

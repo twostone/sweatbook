@@ -20,6 +20,7 @@
     unsaved = false,
     onchange,
     oninput,
+    onretry,
     ondelete,
   }: {
     metrics: Metrics;
@@ -34,6 +35,7 @@
     unsaved?: boolean;
     onchange: () => void; // a value is complete (field left, MAX tapped)
     oninput?: () => void; // every keystroke, for keeping drafts
+    onretry?: () => void; // "Erneut senden" when not saved; default: onchange
     ondelete?: () => void;
   } = $props();
 
@@ -79,7 +81,7 @@
   </button>
 </div>
 {#if unsaved}
-  <p class="unsaved">Nicht gespeichert. <button type="button" class="link-btn" onclick={onchange}>Erneut senden</button></p>
+  <p class="unsaved">Nicht gespeichert. <button type="button" class="link-btn" onclick={onretry ?? onchange}>Erneut senden</button></p>
 {/if}
 {#if noteOpen}
   <div class="note-edit">
@@ -95,12 +97,12 @@
 <style>
   .row {
     display: grid;
-    grid-template-columns: 24px minmax(0, 1fr) 56px var(--tap);
+    grid-template-columns: var(--set-cols-1);
     gap: 6px;
     align-items: center;
   }
   .row.two {
-    grid-template-columns: 24px minmax(0, 1fr) minmax(0, 1fr) 56px var(--tap);
+    grid-template-columns: var(--set-cols-2);
   }
   .idx {
     font: 800 22px var(--display);

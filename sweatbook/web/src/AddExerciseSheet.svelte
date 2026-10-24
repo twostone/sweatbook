@@ -4,8 +4,8 @@
   import Icon from "./Icon.svelte";
   import * as api from "./api";
   import { formatShortDate } from "./logic/format";
-  import { navigate, paths } from "./router.svelte";
-  import { app, changeSession, closeSheet, closeSheetAndNavigate, guard, rememberSheet, type SheetState } from "./store.svelte";
+  import { navigate, paths, replace } from "./router.svelte";
+  import { app, changeSession, closeSheet, closeSheetThen, guard, rememberSheet, type SheetState } from "./store.svelte";
   import type { Exercise } from "./types";
 
   // Picks an exercise from the catalog for a new block or an existing one (superset). Creates nothing: a missing
@@ -13,7 +13,7 @@
   let { sheet }: { sheet: Extract<SheetState, { kind: "add-exercise" }> } = $props();
 
   // The form starts from the sheet as opened (or as remembered when coming back from "Übung anlegen").
-  let query = $state(untrack(() => sheet.query));
+  let query = $state(untrack(() => app.created?.name ?? sheet.query));
   let results = $state<Exercise[]>([]);
   let busy = $state(false);
   let searchField: HTMLInputElement;
@@ -42,16 +42,15 @@
   });
 
   // The exercise just made on "Übung anlegen" comes first.
-  const sorted = $derived(
-    app.createdExerciseId ? [...results].sort((a, b) => Number(b.id === app.createdExerciseId) - Number(a.id === app.createdExerciseId)) : results,
-  );
+  const createdId = $derived(app.created?.id);
+  const sorted = $derived(createdId ? [...results].sort((a, b) => Number(b.id === createdId) - Number(a.id === createdId)) : results);
 
   // Which alias matched, so a hit by alias is understandable.
   function hint(e: Exercise): string {
     const q = query.trim().toLocaleLowerCase("de");
     const alias = q && !e.name.toLocaleLowerCase("de").includes(q) ? e.aliases.find((a) => a.toLocaleLowerCase("de").includes(q)) : undefined;
     if (alias) return `Alias: ${alias}`;
-    if (e.id === app.createdExerciseId) return "neu angelegt";
+    if (e.id === createdId) return "neu angelegt";
     return e.last_used_at ? `zuletzt ${formatShortDate(e.last_used_at)}` : "";
   }
 
@@ -61,9 +60,10 @@
     const ok = await changeSession(() => (target.blockId ? api.addExerciseToBlock(target.blockId, e.id) : api.addBlock(target.sessionId, e.id)));
     busy = false;
     if (!ok) return;
-    app.createdExerciseId = null;
+    app.created = null;
     const added = app.session!.blocks.at(-1)!;
-    if (!target.blockId && target.openAfter) closeSheetAndNavigate(paths.block(target.sessionId, added.id));
+    // From the last block's page: on to the new block as its sibling, so "back" still leads to the overview.
+    if (!target.blockId && target.openAfter) closeSheetThen(() => replace(paths.block(target.sessionId, added.id)));
     else closeSheet();
   }
 
@@ -87,7 +87,7 @@
   <div class="list">
     <h3 class="label">{query.trim() ? "Treffer" : "Zuletzt genutzt"}</h3>
     {#each sorted as e (e.id)}
-      <button type="button" class="row" class:fresh={e.id === app.createdExerciseId} disabled={busy} onclick={() => pick(e)}>
+      <button type="button" class="row" class:fresh={e.id === createdId} disabled={busy} onclick={() => pick(e)}>
         <span>{e.name}</span><span class="muted small">{hint(e)}</span>
       </button>
     {:else}

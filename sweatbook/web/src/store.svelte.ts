@@ -1,7 +1,7 @@
 import * as api from "./api";
 import { ApiError } from "./api";
-import { goUp, navigate, paths, replaceEntry } from "./router.svelte";
-import { load, remove, save } from "./storage";
+import { goUp, navigate, paths } from "./router.svelte";
+import { load, save } from "./storage";
 import type { Me, SessionSummary, SessionTree, SetInput, SetLog } from "./types";
 
 // Where the "add exercise" sheet puts the exercise it is given.
@@ -22,8 +22,8 @@ export const app = $state({
   stale: false,
   error: "",
   sheet: { kind: "none" } as SheetState,
-  // Set by "Übung anlegen" before it returns to the sheet, which then shows the new exercise first.
-  createdExerciseId: null as string | null,
+  // Set by "Übung anlegen" before it returns to the sheet, which then searches for it and marks it.
+  created: null as { id: string; name: string } | null,
 });
 
 const SESSION_CACHE = "session";
@@ -34,6 +34,9 @@ function setSession(tree: SessionTree) {
   save(SESSION_CACHE, tree);
 }
 
+const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
+const cacheSession = () => app.session && save(SESSION_CACHE, $state.snapshot(app.session));
+
 // Runs an action and shows its error instead of throwing. Returns success.
 export async function guard(fn: () => Promise<void>): Promise<boolean> {
   try {
@@ -41,7 +44,7 @@ export async function guard(fn: () => Promise<void>): Promise<boolean> {
     await fn();
     return true;
   } catch (e) {
-    app.error = e instanceof Error ? e.message : String(e);
+    app.error = message(e);
     return false;
   }
 }
@@ -57,7 +60,7 @@ export async function init() {
     save(ME_CACHE, app.me);
   } catch (e) {
     if (e instanceof ApiError && e.offline) app.me = load<Me>(ME_CACHE);
-    if (!app.me) app.error = e instanceof Error ? e.message : String(e);
+    if (!app.me) app.error = message(e);
   }
   app.ready = true;
 }
@@ -79,7 +82,7 @@ export async function loadSession(id: string) {
       app.session = cached;
       app.stale = true; // the offline notice says it all
     } else {
-      app.error = e instanceof Error ? e.message : String(e);
+      app.error = message(e);
     }
   }
 }
@@ -108,42 +111,41 @@ function exerciseSets(blockExerciseId: string): SetLog[] | null {
   return null;
 }
 
+// Puts `replacement` (one set, or none to delete) where the set `id` is in the shown session.
+function replaceSet(blockExerciseId: string, id: string, replacement: SetLog[]) {
+  const sets = exerciseSets(blockExerciseId);
+  const index = sets?.findIndex((s) => s.id === id) ?? -1;
+  if (sets && index >= 0) sets.splice(index, 1, ...replacement);
+  cacheSession();
+}
+
 // Sets answer with themselves only; they are put into the shown session instead of loading it again.
 export const addSets = (blockExerciseId: string, sets: SetInput[]) =>
   guard(async () => {
     const created = await api.addSets(blockExerciseId, sets);
     exerciseSets(blockExerciseId)?.push(...created);
-    if (app.session) save(SESSION_CACHE, $state.snapshot(app.session));
+    cacheSession();
   });
 
 export const updateSet = (blockExerciseId: string, id: string, patch: SetInput) =>
   guard(async () => {
     const updated = await api.updateSet(id, patch);
-    const sets = exerciseSets(blockExerciseId);
-    const index = sets?.findIndex((s) => s.id === id) ?? -1;
-    if (sets && index >= 0) sets[index] = updated;
-    if (app.session) save(SESSION_CACHE, $state.snapshot(app.session));
+    replaceSet(blockExerciseId, id, [updated]);
   });
 
 export const deleteSet = (blockExerciseId: string, id: string) =>
   guard(async () => {
     await api.deleteSet(id);
-    const sets = exerciseSets(blockExerciseId);
-    const index = sets?.findIndex((s) => s.id === id) ?? -1;
-    if (sets && index >= 0) sets.splice(index, 1);
-    if (app.session) save(SESSION_CACHE, $state.snapshot(app.session));
+    replaceSet(blockExerciseId, id, []);
   });
 
-// Unsent text of a set row (draft row "draft:<block_exercise id>", edited set "edit:<set id>").
-export const loadRow = <T>(key: string) => load<T>(`row:${key}`);
-export const saveRow = (key: string, row: unknown) => save(`row:${key}`, row);
-export const clearRow = (key: string) => remove(`row:${key}`);
 
 // Sheets: an open sheet owns one history entry (same URL), so "back" (Android button or gesture) closes it instead of
 // leaving the page. The sheet lives in that entry's state: coming back from "Übung anlegen" opens it again as it was.
+const sheetInEntry = () => (history.state as { sheet?: SheetState } | null)?.sheet;
+
 function syncSheet() {
-  const state = history.state as { sheet?: SheetState } | null;
-  app.sheet = state?.sheet ?? { kind: "none" };
+  app.sheet = sheetInEntry() ?? { kind: "none" };
 }
 
 window.addEventListener("popstate", syncSheet);
@@ -161,16 +163,20 @@ export function rememberSheet(sheet: SheetState) {
   history.replaceState({ sheet: $state.snapshot(sheet) }, "");
 }
 
-// Closes the sheet and opens a page in one step (closeSheet's history.back() would race a navigation).
-export function closeSheetAndNavigate(hash: string) {
-  const inSheetEntry = Boolean((history.state as { sheet?: unknown } | null)?.sheet);
-  app.sheet = { kind: "none" };
-  if (inSheetEntry) replaceEntry(hash);
-  else navigate(hash);
+// Closes the sheet, then moves on once its history entry is gone (a navigation right away would race the
+// history.back() and be undone by it).
+export function closeSheetThen(next: () => void) {
+  if (!sheetInEntry()) {
+    app.sheet = { kind: "none" };
+    next();
+    return;
+  }
+  window.addEventListener("popstate", () => next(), { once: true });
+  closeSheet();
 }
 
 export function closeSheet() {
   if (app.sheet.kind === "none") return;
   app.sheet = { kind: "none" };
-  if ((history.state as { sheet?: unknown } | null)?.sheet) history.back();
+  if (sheetInEntry()) history.back();
 }

@@ -16,12 +16,16 @@
   --on-strong: #ffffff;
   --danger: #b3261e;
   --danger-soft: #fbe4e2;
+  --scrim: rgb(11 12 14 / 0.45); /* behind sheets */
   --font: "Barlow", system-ui, sans-serif;
   --display: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
   --radius: 14px;
   --radius-field: 12px;
   --tap: 44px; /* smallest touch target */
   --field-h: 56px; /* number fields: big enough for gym hands */
+  /* Columns of a set row and its headings: number, one or two value fields, MAX, note. */
+  --set-cols-1: 24px minmax(0, 1fr) 56px var(--tap);
+  --set-cols-2: 24px minmax(0, 1fr) minmax(0, 1fr) 56px var(--tap);
   color-scheme: light dark;
 }
 @media (prefers-color-scheme: dark) {
@@ -39,6 +43,7 @@
     --on-strong: #0b0c0e;
     --danger: #ff8a80;
     --danger-soft: #3a1d1b;
+    --scrim: rgb(0 0 0 / 0.6);
   }
 }
 

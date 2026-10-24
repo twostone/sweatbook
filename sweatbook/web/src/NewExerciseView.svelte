@@ -29,7 +29,7 @@
     await guard(async () => {
       try {
         const created = await api.createExercise({ name: name.trim(), metrics });
-        app.createdExerciseId = created.id;
+        app.created = { id: created.id, name: created.name };
         history.back();
       } catch (err) {
         if (err instanceof ApiError && err.status === 409 && typeof err.detail.taken_by === "string") takenBy = err.detail.taken_by;

@@ -81,7 +81,7 @@ export const updateExercise = (id: string, p: ExercisePatch) => request<Exercise
 // Only for exercises never used (409 "exercise in use" otherwise: archive instead).
 export const deleteExercise = (id: string) => request<void>("DELETE", `api/exercises/${enc(id)}`);
 // Sets by session, newest first; `before` (a started_at) pages further back.
-export const exerciseHistory = (id: string, before?: string, limit = 10) =>
+export const exerciseHistory = (id: string, before: string | undefined, limit: number) =>
   request<HistoryEntry[]>(
     "GET",
     `api/exercises/${enc(id)}/history?${new URLSearchParams({ limit: String(limit), ...(before ? { before } : {}) })}`,

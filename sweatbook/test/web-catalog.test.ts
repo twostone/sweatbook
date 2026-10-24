@@ -28,7 +28,8 @@ test("similar exercises share a word of the new name, the exercise itself is lef
     similarExercises(catalog, "Rudern Kabel sitzend").map((e) => e.id),
     ["1", "2"],
   );
-  assert.deepEqual(similarExercises(catalog, "row").map((e) => e.id), [], "words under four letters are too unspecific");
+  assert.deepEqual(similarExercises(catalog, "row").map((e) => e.id), ["4"], "short names still find what the search finds");
+  assert.deepEqual(similarExercises(catalog, "KH Bankdrücken").map((e) => e.id), [], "words under four letters alone are too unspecific");
   assert.deepEqual(similarExercises(catalog, "Bench Rows").map((e) => e.id), ["4"], "aliases count");
   assert.deepEqual(similarExercises(catalog, "Rudern vorgebeugt", "1").map((e) => e.id), ["2"]);
   assert.deepEqual(similarExercises(catalog, "").map((e) => e.id), []);

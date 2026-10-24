@@ -65,7 +65,7 @@
 
     <main>
       {#if superset}
-        <h1 class="display title">Supersatz</h1>
+        <h1 class="display page-title">Supersatz</h1>
         {#each block.exercises as be, i (be.id)}
           <section class="card exercise" aria-labelledby="ex-{be.id}">
             <div class="ex-head">
@@ -80,7 +80,7 @@
         </button>
       {:else}
         {@const be = block.exercises[0]!}
-        <h1 class="display title big">{be.exercise.name}</h1>
+        <h1 class="display page-title big">{be.exercise.name}</h1>
         <ExerciseSets {be} bind:draft={drafts[be.id]} />
       {/if}
     </main>
@@ -119,13 +119,8 @@
   .grow {
     flex: 1;
   }
-  .title {
-    font-size: 36px;
-    padding: 0 4px 6px;
-  }
-  .title.big {
+  .page-title.big {
     font-size: 46px;
-    overflow-wrap: anywhere;
   }
   .exercise {
     display: flex;

@@ -3,7 +3,7 @@
   import Icon from "./Icon.svelte";
   import * as api from "./api";
   import { formatSessionDate, formatSet } from "./logic/format";
-  import { goUp, navigate, paths } from "./router.svelte";
+  import { goUp, navigate, paths, replace } from "./router.svelte";
   import { guard } from "./store.svelte";
   import type { Exercise, ExerciseInput, HistoryEntry } from "./types";
 
@@ -15,7 +15,7 @@
   let more = $state(false); // the last page was full, so older sessions may exist
   let saved = $state(false);
   let confirmDelete = $state(false);
-  const PAGE = 10;
+  const PAGE = 10; // sessions per load of the history
 
   $effect(() => {
     guard(async () => {
@@ -53,7 +53,7 @@
   </header>
   <main>
     {#if exercise}
-      <h1 class="display">{exercise.name}</h1>
+      <h1 class="display page-title">{exercise.name}</h1>
       {#if exercise.archived}<p class="archived label">Archiviert</p>{/if}
       {#key exercise.id}
         <ExerciseForm
@@ -62,7 +62,7 @@
           metricsLocked={entries.length > 0}
           submitLabel="Speichern"
           onsave={save}
-          onpick={(e) => navigate(paths.exercise(e.id))}
+          onpick={(e) => replace(paths.exercise(e.id))}
         />
       {/key}
       {#if saved}<p class="muted saved" role="status">Gespeichert.</p>{/if}
@@ -118,11 +118,6 @@
 </div>
 
 <style>
-  h1 {
-    font-size: 36px;
-    padding: 0 4px 4px;
-    overflow-wrap: anywhere;
-  }
   .archived {
     margin: 0 4px;
     color: var(--danger);

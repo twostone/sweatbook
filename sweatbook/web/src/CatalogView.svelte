@@ -46,7 +46,7 @@
     <span class="label">Start</span>
   </header>
   <main>
-    <h1 class="display">Übungskatalog</h1>
+    <h1 class="display page-title">Übungskatalog</h1>
     <div class="search">
       <span class="icon"><Icon name="search" size={20} /></span>
       <label class="sr-only" for="catalog-search">Übung suchen</label>
@@ -76,10 +76,6 @@
 </div>
 
 <style>
-  h1 {
-    font-size: 36px;
-    padding: 0 4px 4px;
-  }
   .search {
     position: relative;
   }

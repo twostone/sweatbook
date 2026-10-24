@@ -16,6 +16,7 @@
     submitLabel,
     onsave,
     onpick,
+    pickArchived = true,
   }: {
     initial: ExerciseInput;
     exceptId?: string; // the exercise being edited, left out of the warning
@@ -23,6 +24,7 @@
     submitLabel: string;
     onsave: (input: ExerciseInput) => Promise<void>;
     onpick?: (exercise: Exercise) => void; // tapping a similar exercise
+    pickArchived?: boolean; // archived ones can be picked too (not when picking for a block: they are refused there)
   } = $props();
 
   const start = untrack(() => initial);
@@ -34,6 +36,8 @@
   let catalog = $state<Exercise[]>([]);
   let takenBy = $state<string | null>(null);
   let busy = $state(false);
+
+  const MAX_SIMILAR = 5; // a hint, not a second catalog
 
   const OPTIONS: { value: Metrics; label: string }[] = [
     { value: "weight_reps", label: "kg + Wdh." },
@@ -82,11 +86,11 @@
     {:else if similar.length}
       <div class="similar" role="status">
         <span class="similar-title">Ähnliche Übungen im Katalog</span>
-        {#each similar.slice(0, 5) as e (e.id)}
-          {#if onpick}
-            <button type="button" class="link-btn similar-item" onclick={() => onpick(e)}>{e.name}</button>
+        {#each similar.slice(0, MAX_SIMILAR) as e (e.id)}
+          {#if onpick && (pickArchived || !e.archived)}
+            <button type="button" class="link-btn similar-item" onclick={() => onpick(e)}>{e.name}{e.archived ? " (archiviert)" : ""}</button>
           {:else}
-            <span class="similar-item">{e.name}</span>
+            <span class="similar-item">{e.name}{e.archived ? " (archiviert)" : ""}</span>
           {/if}
         {/each}
       </div>

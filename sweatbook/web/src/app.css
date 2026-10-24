@@ -122,6 +122,12 @@ a {
   line-height: 0.95;
   margin: 0;
 }
+/* The big name at the top of a page. */
+.page-title {
+  font-size: 36px;
+  padding: 0 4px 4px;
+  overflow-wrap: anywhere;
+}
 .label {
   font-weight: 700;
   font-size: 12px;

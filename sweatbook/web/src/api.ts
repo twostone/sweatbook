@@ -1,6 +1,8 @@
 import type {
   Exercise,
   ExerciseInput,
+  ExercisePatch,
+  HistoryEntry,
   Me,
   SessionPatch,
   SessionSummary,
@@ -73,6 +75,17 @@ export const getMe = () => request<Me>("GET", "api/me");
 // Catalog incl. archived ones, searched over names and aliases, recently used first.
 export const listExercises = (q = "") => request<Exercise[]>("GET", q ? `api/exercises?q=${enc(q)}` : "api/exercises");
 export const createExercise = (e: ExerciseInput) => request<Exercise>("POST", "api/exercises", e);
+export const getExercise = (id: string) => request<Exercise>("GET", `api/exercises/${enc(id)}`);
+// Fields left out stay; `aliases` replaces the whole list.
+export const updateExercise = (id: string, p: ExercisePatch) => request<Exercise>("PATCH", `api/exercises/${enc(id)}`, p);
+// Only for exercises never used (409 "exercise in use" otherwise: archive instead).
+export const deleteExercise = (id: string) => request<void>("DELETE", `api/exercises/${enc(id)}`);
+// Sets by session, newest first; `before` (a started_at) pages further back.
+export const exerciseHistory = (id: string, before: string | undefined, limit: number) =>
+  request<HistoryEntry[]>(
+    "GET",
+    `api/exercises/${enc(id)}/history?${new URLSearchParams({ limit: String(limit), ...(before ? { before } : {}) })}`,
+  );
 
 export const listSessions = (limit = 20) => request<SessionSummary[]>("GET", `api/sessions?limit=${limit}`);
 export const createSession = (s: { title?: string | null; started_at?: string } = {}) =>

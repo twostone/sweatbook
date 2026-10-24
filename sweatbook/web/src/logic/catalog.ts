@@ -1,0 +1,36 @@
+import type { Exercise } from "../types.ts";
+
+// Names compare like on the server (nameKey in src/data/common.ts): spaces collapsed, lower case with German rules,
+// because SQLite's lower() only knows ASCII.
+export const tidy = (text: string) => text.trim().replace(/\s+/g, " ");
+export const nameKey = (text: string) => tidy(text).toLocaleLowerCase("de");
+
+const namesOf = (e: Exercise) => [e.name, ...e.aliases].map(nameKey);
+
+// Catalog search: the text anywhere in the name or an alias. Empty matches everything.
+export function matches(exercise: Exercise, query: string): boolean {
+  const key = nameKey(query);
+  return !key || namesOf(exercise).some((n) => n.includes(key));
+}
+
+// Shorter words ("KH", "row", "mit") would match half the catalog.
+const MIN_WORD_LENGTH = 4;
+
+// The warning while creating or renaming: what the catalog search finds for the typed name ("Dip" -> "Dips"), plus
+// exercises sharing a longer word of it, so "Rudern Kabel" also shows "Rudern vorgebeugt" before a near-duplicate is
+// made. Exact clashes are refused by the server anyway.
+export function similarExercises(catalog: Exercise[], name: string, exceptId?: string): Exercise[] {
+  if (!nameKey(name)) return [];
+  const words = nameKey(name)
+    .split(" ")
+    .filter((w) => w.length >= MIN_WORD_LENGTH);
+  const sharesWord = (e: Exercise) => namesOf(e).some((n) => words.some((w) => n.includes(w)));
+  return catalog.filter((e) => e.id !== exceptId && (matches(e, name) || sharesWord(e)));
+}
+
+// The alias list after typing one more: tidied, skipped when empty, already there or the exercise's own name.
+export function addAlias(aliases: string[], text: string, name: string): string[] {
+  const alias = tidy(text);
+  const taken = [name, ...aliases].map(nameKey);
+  return alias && !taken.includes(nameKey(alias)) ? [...aliases, alias] : aliases;
+}

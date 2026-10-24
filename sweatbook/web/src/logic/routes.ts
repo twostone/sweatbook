@@ -4,13 +4,19 @@ export type Route =
   | { name: "start" }
   | { name: "session"; sessionId: string }
   | { name: "block"; sessionId: string; blockId: string }
-  | { name: "new-exercise"; prefill: string };
+  | { name: "catalog" }
+  | { name: "exercise"; exerciseId: string }
+  // fromSheet: opened from "add exercise", so saving returns there with the new exercise picked
+  | { name: "new-exercise"; prefill: string; fromSheet: boolean };
 
 export const paths = {
   start: () => "#/",
   session: (sessionId: string) => `#/s/${sessionId}`,
   block: (sessionId: string, blockId: string) => `#/s/${sessionId}/b/${blockId}`,
-  newExercise: (prefill: string) => `#/exercises/new?name=${encodeURIComponent(prefill)}`,
+  catalog: () => "#/exercises",
+  exercise: (exerciseId: string) => `#/exercises/${exerciseId}`,
+  newExercise: (prefill: string, fromSheet = false) =>
+    `#/exercises/new?${new URLSearchParams({ name: prefill, ...(fromSheet ? { from: "sheet" } : {}) })}`,
 };
 
 export function parseRoute(hash: string): Route {
@@ -20,8 +26,12 @@ export function parseRoute(hash: string): Route {
     if (parts[2] === "b" && parts[3]) return { name: "block", sessionId: parts[1], blockId: parts[3] };
     return { name: "session", sessionId: parts[1] };
   }
-  if (parts[0] === "exercises" && parts[1] === "new") {
-    return { name: "new-exercise", prefill: new URLSearchParams(query).get("name") ?? "" };
+  if (parts[0] === "exercises") {
+    if (parts[1] === "new") {
+      const params = new URLSearchParams(query);
+      return { name: "new-exercise", prefill: params.get("name") ?? "", fromSheet: params.get("from") === "sheet" };
+    }
+    return parts[1] ? { name: "exercise", exerciseId: parts[1] } : { name: "catalog" };
   }
   return { name: "start" };
 }

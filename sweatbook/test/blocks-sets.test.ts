@@ -6,9 +6,28 @@ async function catalog(call: Awaited<ReturnType<typeof setup>>["call"]) {
   const s = (await call("POST", "/api/exercises", squat)).json;
   const p = (await call("POST", "/api/exercises", pullup)).json;
   const d = (await call("POST", "/api/exercises", deadhang)).json;
-  const w = (await call("POST", "/api/exercises", { name: "Deadhang Weste", metrics: "weight_duration" })).json;
+  const w = (await call("POST", "/api/exercises", { name: "Deadhang Weste", fields: ["weight", "duration"] })).json;
   return { s, p, d, w };
 }
+
+test("sets: kg + distance + time (farmer's walk): any one of distance and time is enough, and they round-trip", async () => {
+  const { call } = setup();
+  const f = (await call("POST", "/api/exercises", { name: "Farmer's Walk", fields: ["weight", "distance", "duration"] })).json;
+  assert.deepEqual(f.fields, ["weight", "distance", "duration"]);
+  const tree = await sessionWith(call, [f.id]);
+  const be = tree.blocks[0].exercises[0].id;
+  const post = (set: object) => call("POST", `/api/block-exercises/${be}/sets`, { sets: [set] });
+  assert.equal((await post({ weight_kg: 24 })).status, 400, "kg alone is not a set");
+  assert.equal((await post({ weight_kg: 24, distance_m: 60, reps: 1 })).status, 400);
+  assert.equal((await post({ distance_m: 1.5 })).status, 400, "whole metres");
+  const both = (await post({ weight_kg: 24, distance_m: 60, duration_s: 45 })).json[0];
+  assert.deepEqual([both.weight_kg, both.distance_m, both.duration_s], [24, 60, 45]);
+  assert.equal((await post({ distance_m: 60 })).status, 201);
+  const patched = await call("PATCH", `/api/sets/${both.id}`, { distance_m: null });
+  assert.equal(patched.json.distance_m, null, "time alone still says something");
+  assert.equal((await call("PATCH", `/api/sets/${both.id}`, { duration_s: null })).status, 400);
+  assert.equal((await call("GET", `/api/sessions/${tree.id}`)).json.blocks[0].exercises[0].exercise.fields.length, 3);
+});
 
 test("sets: fields must fit the exercise", async () => {
   const { call } = setup();
@@ -24,6 +43,7 @@ test("sets: fields must fit the exercise", async () => {
   assert.equal((await post(dh, { duration_s: 72, is_max: true })).status, 201);
   assert.equal((await post(ws, { duration_s: 40, weight_kg: 10 })).status, 201);
   assert.equal((await post(ws, { duration_s: 40, reps: 1 })).status, 400);
+  assert.equal((await post(sq, { reps: 10, distance_m: 5 })).status, 400);
   assert.equal((await post(sq, { reps: -1 })).status, 400);
   assert.equal((await post(sq, { reps: 2.5 })).status, 400);
   assert.equal((await call("POST", `/api/block-exercises/${sq}/sets`, { sets: [] })).status, 400);

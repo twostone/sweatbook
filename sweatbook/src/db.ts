@@ -81,6 +81,20 @@ export const MIGRATIONS: readonly string[] = [
   `,
   // v2: a note per exercise in a session, e.g. the plan ("5 × max, 2 min Pause").
   `ALTER TABLE block_exercise ADD COLUMN note TEXT;`,
+  // v3: which fields a set has is chosen per exercise (kg, reps, distance, time) instead of three fixed kinds, and sets
+  // get a distance. The old kinds map onto the new flags.
+  `
+  ALTER TABLE exercise ADD COLUMN has_weight INTEGER NOT NULL DEFAULT 0 CHECK (has_weight IN (0, 1));
+  ALTER TABLE exercise ADD COLUMN has_reps INTEGER NOT NULL DEFAULT 0 CHECK (has_reps IN (0, 1));
+  ALTER TABLE exercise ADD COLUMN has_distance INTEGER NOT NULL DEFAULT 0 CHECK (has_distance IN (0, 1));
+  ALTER TABLE exercise ADD COLUMN has_duration INTEGER NOT NULL DEFAULT 0 CHECK (has_duration IN (0, 1));
+  UPDATE exercise SET
+    has_weight = CASE WHEN metrics IN ('weight_reps', 'weight_duration') THEN 1 ELSE 0 END,
+    has_reps = CASE WHEN metrics = 'weight_reps' THEN 1 ELSE 0 END,
+    has_duration = CASE WHEN metrics IN ('duration', 'weight_duration') THEN 1 ELSE 0 END;
+  ALTER TABLE exercise DROP COLUMN metrics;
+  ALTER TABLE set_log ADD COLUMN distance_m INTEGER CHECK (distance_m >= 0);
+  `,
 ];
 
 export type Db = DatabaseSync;

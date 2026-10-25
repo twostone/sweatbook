@@ -30,7 +30,7 @@
     if (!block || busy) return;
     const sets: (SetInput & { block_exercise_id: string })[] = [];
     for (const [i, be] of block.exercises.entries()) {
-      const input = draftInput(drafts[be.id]!, be.exercise.metrics);
+      const input = draftInput(drafts[be.id]!, be.exercise.fields);
       if (!input.ok) {
         app.error = `${tag(i)}: ${fieldName(input.field)} fehlt oder stimmt nicht.`;
         return;

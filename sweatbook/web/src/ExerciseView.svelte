@@ -62,9 +62,8 @@
       {#if exercise.archived}<p class="archived label">Archiviert</p>{/if}
       {#key exercise.id}
         <ExerciseForm
-          initial={{ name: exercise.name, metrics: exercise.metrics, aliases: exercise.aliases, note: exercise.note ?? "" }}
+          initial={{ name: exercise.name, fields: exercise.fields, aliases: exercise.aliases, note: exercise.note ?? "" }}
           exceptId={exercise.id}
-          metricsLocked={entries.length > 0}
           submitLabel="Speichern"
           onsave={save}
           onpick={(e) => replace(paths.exercise(e.id))}
@@ -108,7 +107,7 @@
           </span>
           <ol class="sets">
             {#each entry.sets as set (set.id)}
-              <li><span class="num-text">{formatSet(set, exercise.metrics)}</span>{#if set.note}<span class="muted note"> · {set.note}</span>{/if}</li>
+              <li><span class="num-text">{formatSet(set, exercise.fields)}</span>{#if set.note}<span class="muted note"> · {set.note}</span>{/if}</li>
             {/each}
           </ol>
         </a>

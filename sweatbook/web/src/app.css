@@ -23,9 +23,6 @@
   --radius-field: 12px;
   --tap: 44px; /* smallest touch target */
   --field-h: 56px; /* number fields: big enough for gym hands */
-  /* Columns of a set row and its headings: number, one or two value fields, MAX, note. */
-  --set-cols-1: 24px minmax(0, 1fr) 56px var(--tap);
-  --set-cols-2: 24px minmax(0, 1fr) minmax(0, 1fr) 56px var(--tap);
   color-scheme: light dark;
 }
 @media (prefers-color-scheme: dark) {
@@ -150,6 +147,13 @@ a {
   overflow: hidden;
   clip: rect(0 0 0 0);
   white-space: nowrap;
+}
+
+/* A set row and its headings: number, one column per field of the exercise (--fields), MAX, note. */
+.set-grid {
+  display: grid;
+  grid-template-columns: 24px repeat(var(--fields, 1), minmax(0, 1fr)) 56px var(--tap);
+  gap: 6px;
 }
 
 /* Buttons */

@@ -36,7 +36,7 @@
   <main>
     <h1 class="display page-title">Übung anlegen</h1>
     {#if fromSheet}<p class="muted intro">Danach geht es zurück zur Auswahl.</p>{/if}
-    <ExerciseForm initial={{ name: prefill, metrics: "weight_reps", aliases: [], note: "" }} submitLabel="Anlegen" onsave={save} onpick={pick} pickArchived={!fromSheet} />
+    <ExerciseForm initial={{ name: prefill, fields: ["weight", "reps"], aliases: [], note: "" }} submitLabel="Anlegen" onsave={save} onpick={pick} pickArchived={!fromSheet} />
   </main>
 </div>
 

@@ -5,10 +5,10 @@
   import SetRow from "./SetRow.svelte";
   import { draftInput, dropDraft, freshDraft, headings, initialDraft, keepDraft, type DraftRow } from "./drafts";
   import { formatShortDate, summarize } from "./logic/format";
-  import { parseQuickEntry } from "./logic/quick-entry";
+  import { parseQuickEntry, quickEntryExample, quickEntryField } from "./logic/quick-entry";
   import type { RowField } from "./logic/set-row";
   import { addSets } from "./store.svelte";
-  import type { SessionExercise } from "./types";
+  import type { Field, SessionExercise } from "./types";
 
   // The sets of one exercise in a block: logged sets, the highlighted "next set" row and "+ Satz". In a superset the
   // block owns the drafts (bound here) so "+ Runde" can send all of them at once.
@@ -22,7 +22,7 @@
 
   // Keyed by the block exercise (each block page is keyed), so the draft is set up once.
   if (draft === undefined) draft = initialDraft(untrack(() => be));
-  const metrics = $derived(be.exercise.metrics);
+  const fields = $derived(be.exercise.fields);
   const who = $derived(tag ?? be.exercise.name);
   let invalid = $state<RowField | null>(null);
   let quick = $state("");
@@ -31,7 +31,7 @@
   let unsent = $state(false); // "+ Satz" failed: the row says so until it goes through
 
   async function addSet() {
-    const input = draftInput(draft!, metrics);
+    const input = draftInput(draft!, fields);
     invalid = input.ok ? null : input.field;
     if (!input.ok || busy) return;
     busy = true;
@@ -46,7 +46,7 @@
 
   async function addQuick(e: SubmitEvent) {
     e.preventDefault();
-    const sets = parseQuickEntry(quick, metrics);
+    const sets = parseQuickEntry(quick, fields);
     quickInvalid = sets === null;
     if (!sets || busy) return;
     busy = true;
@@ -58,28 +58,31 @@
     busy = false;
   }
 
-  const quickExample = $derived(metrics === "weight_reps" ? "3×5@100" : metrics === "duration" ? "3×45" : "3×30@10");
+  // Only exercises with a single value field have a quick entry (kg + reps, time, distance, …).
+  const quickExample = $derived(quickEntryExample(fields));
+  const QUICK_VALUE_NAME: Partial<Record<Field, string>> = { reps: "Wdh.", duration: "Zeit", distance: "Meter" };
+  const quickValueName = $derived(QUICK_VALUE_NAME[quickEntryField(fields) ?? "reps"]);
 </script>
 
 {#if be.last_time}
   <p class="last" class:tile={!compact}>
     <span class="label">Letztes Mal · {formatShortDate(be.last_time.started_at)}</span>
-    <span class="num-text">{summarize(be.last_time.sets, metrics)}</span>
+    <span class="num-text">{summarize(be.last_time.sets, fields)}</span>
   </p>
 {/if}
 
 <div class="sets">
-  <div class="heads" class:two={headings(metrics).length === 2} aria-hidden="true">
+  <div class="heads set-grid" style:--fields={fields.length} aria-hidden="true">
     <span></span>
-    {#each headings(metrics) as h (h)}<span>{h}</span>{/each}
+    {#each headings(fields) as h (h)}<span>{h}</span>{/each}
     <span>Max</span><span></span>
   </div>
   {#each be.sets as set, i (set.id)}
-    <LoggedSet {set} blockExerciseId={be.id} {metrics} index={i + 1} label="{tag ? `${tag} ` : ''}Satz {i + 1}" />
+    <LoggedSet {set} blockExerciseId={be.id} {fields} index={i + 1} label="{tag ? `${tag} ` : ''}Satz {i + 1}" />
   {/each}
   {#if draft}
     <SetRow
-      {metrics}
+      {fields}
       index={String(be.sets.length + 1)}
       label="{who} nächster Satz"
       bind:text={() => draft!, (t) => (draft = { ...draft!, ...t })}
@@ -95,7 +98,7 @@
     />
   {/if}
   {#if be.sets.length === 0 && !compact}
-    <p class="hint muted">Werte prüfen, dann „+ Satz“.{metrics === "duration" ? "" : " Kein Gewicht = Körpergewicht."}</p>
+    <p class="hint muted">Werte prüfen, dann „+ Satz“.{fields.includes("weight") ? " Kein Gewicht = Körpergewicht." : ""}</p>
   {/if}
 </div>
 
@@ -103,7 +106,7 @@
   <button type="button" class="btn" class:strong={!compact} disabled={busy} onclick={addSet}>
     <Icon name="plus" size={18} />Satz
   </button>
-  {#if !compact}
+  {#if !compact && quickExample}
     <form class="quick" onsubmit={addQuick}>
       <label class="sr-only" for="quick-{be.id}">Schnelleingabe {be.exercise.name}</label>
       <input
@@ -120,7 +123,7 @@
   {/if}
 </div>
 {#if quickInvalid}
-  <p class="quick-help" role="alert">So geht’s: Sätze × {metrics === "weight_reps" ? "Wdh." : "Zeit"}{metrics === "duration" ? "" : " @ kg"}, z. B. {quickExample}</p>
+  <p class="quick-help" role="alert">So geht’s: Sätze × {quickValueName}{fields.includes("weight") ? " @ kg" : ""}, z. B. {quickExample}</p>
 {/if}
 
 <style>
@@ -149,18 +152,12 @@
     gap: 8px;
   }
   .heads {
-    display: grid;
-    grid-template-columns: var(--set-cols-1);
-    gap: 6px;
     font-weight: 700;
     font-size: 11px;
     letter-spacing: 0.12em;
     text-transform: uppercase;
     color: var(--muted);
     text-align: center;
-  }
-  .heads.two {
-    grid-template-columns: var(--set-cols-2);
   }
   .hint {
     margin: 0 0 0 30px;

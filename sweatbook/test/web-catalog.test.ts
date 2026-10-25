@@ -6,7 +6,7 @@ import type { Exercise } from "../web/src/types.ts";
 const ex = (id: string, name: string, aliases: string[] = [], archived = false): Exercise => ({
   id,
   name,
-  metrics: "weight_reps",
+  fields: ["weight", "reps"],
   note: null,
   archived,
   aliases,

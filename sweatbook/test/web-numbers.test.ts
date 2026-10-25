@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { durationInput, formatDuration, parseDuration, parseKg, parseReps } from "../web/src/logic/numbers.ts";
+import { durationInput, formatDuration, parseDistance, parseDuration, parseKg, parseReps } from "../web/src/logic/numbers.ts";
 
 test("time is typed as digits: the last two are seconds", () => {
   assert.equal(parseDuration("112"), 72);
@@ -49,4 +49,13 @@ test("reps: whole numbers only", () => {
   assert.equal(parseReps(""), null);
   assert.equal(parseReps("7,5"), undefined);
   assert.equal(parseReps("-1"), undefined);
+});
+
+test("distance: whole metres, an m may follow", () => {
+  assert.equal(parseDistance("60"), 60);
+  assert.equal(parseDistance("60 m"), 60);
+  assert.equal(parseDistance("5000m"), 5000);
+  assert.equal(parseDistance(""), null);
+  assert.equal(parseDistance("6,5"), undefined);
+  assert.equal(parseDistance("abc"), undefined);
 });

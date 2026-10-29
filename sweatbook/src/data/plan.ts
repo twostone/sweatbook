@@ -71,7 +71,7 @@ export class PlanContext {
     if (id === null) return null;
     let ref = this.exercises.get(id);
     if (!ref) {
-      const row = this.db.prepare("SELECT id, name, has_weight, has_reps, has_distance, has_duration FROM exercise WHERE id = ? AND user_id = ?").get(id, this.userId) as
+      const row = this.db.prepare("SELECT id, name, has_weight, has_reps, has_distance, has_duration FROM exercise WHERE id = ?").get(id) as
         | (Record<string, unknown> & { id: string; name: string })
         | undefined;
       if (!row) return null;
@@ -83,7 +83,7 @@ export class PlanContext {
 
   oneRm(exerciseId: string, day: string | null): number | null {
     const key = `${exerciseId}|${day}`;
-    if (!this.oneRms.has(key)) this.oneRms.set(key, latestOneRm(this.db, exerciseId, day));
+    if (!this.oneRms.has(key)) this.oneRms.set(key, latestOneRm(this.db, this.userId, exerciseId, day));
     return this.oneRms.get(key) ?? null;
   }
 }

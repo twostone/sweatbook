@@ -80,12 +80,17 @@ test("exercise: archived ones cannot be added; used ones cannot be deleted", asy
   assert.equal((await call("DELETE", `/api/exercises/${unused.id}`)).status, 204);
 });
 
-test("exercise: every user has an own catalog", async () => {
+test("exercise: the catalog is shared, names are unique across users, last use is the user's own", async () => {
   const { as } = setup();
   const anna = as("anna");
   const ben = as("ben");
   const e = (await anna("POST", "/api/exercises", squat)).json;
-  assert.equal((await ben("GET", "/api/exercises")).json.length, 0);
-  assert.equal((await ben("GET", `/api/exercises/${e.id}`)).status, 404);
-  assert.equal((await ben("POST", "/api/exercises", squat)).status, 201);
+  assert.equal((await ben("GET", "/api/exercises")).json.length, 1);
+  assert.equal((await ben("GET", `/api/exercises/${e.id}`)).status, 200);
+  const clash = await ben("POST", "/api/exercises", { ...squat, name: "kniebeuge" });
+  assert.equal(clash.status, 409);
+  assert.equal(clash.json.taken_by, "Kniebeuge");
+  await sessionWith(anna, [e.id]);
+  assert.notEqual((await anna("GET", `/api/exercises/${e.id}`)).json.last_used_at, null);
+  assert.equal((await ben("GET", `/api/exercises/${e.id}`)).json.last_used_at, null);
 });

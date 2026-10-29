@@ -24,6 +24,8 @@ const MESSAGES: Record<string, string> = {
   "name taken": "Den Namen gibt es schon im Katalog.",
   "exercise archived": "Die Übung ist archiviert.",
   "exercise in use": "Die Übung wird schon benutzt und lässt sich nur archivieren.",
+  "only the owner may do this": "Das darf nur der Besitzer des Plans.",
+  "the owner cannot leave": "Der Besitzer kann seinen Plan nicht verlassen.",
   "ended_at before started_at": "Das Ende liegt vor dem Start.",
 };
 
@@ -133,8 +135,10 @@ export const skipPlannedSession = (id: string, skipped: boolean) =>
 // Plan changes answer with the whole program, which replaces what the client shows.
 export const createProgram = (name: string, startDate: string) =>
   request<ProgramTree>("POST", "api/programs", { name, start_date: startDate });
-export const updateProgram = (id: string, patch: { name?: string; start_date?: string; archived?: boolean }) =>
+export const updateProgram = (id: string, patch: { name?: string; shared?: boolean; start_date?: string; archived?: boolean }) =>
   request<ProgramTree>("PATCH", `api/programs/${enc(id)}`, patch);
+export const joinProgram = (id: string, startDate: string) => request<ProgramTree>("POST", `api/programs/${enc(id)}/join`, { start_date: startDate });
+export const leaveProgram = (id: string) => request<void>("DELETE", `api/programs/${enc(id)}/membership`);
 export const deleteProgram = (id: string) => request<void>("DELETE", `api/programs/${enc(id)}`);
 // copyOf: the week to copy (its sessions and lines); without it the week is empty.
 export const addWeek = (programId: string, week: { phase?: string | null; deload?: boolean; copy_of?: string }) =>

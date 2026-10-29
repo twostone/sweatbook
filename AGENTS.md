@@ -54,17 +54,19 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
 
 ```
 app_user        HA-Nutzer -> eigene id (ha_user_id eindeutig)
-exercise        Katalog pro Nutzer: name, Satzfelder (has_weight, has_reps, has_distance, has_duration), note, archived
+exercise        gemeinsamer Katalog aller Nutzer (user_id = angelegt von, nie gefiltert): name, Satzfelder (has_weight, has_reps, has_distance, has_duration), note, archived
 exercise_alias  weitere Namen für die Suche
 session         ein Training: title, started_at, ended_at (null = läuft), note
 block           geordnet in der Session: type straight (eine Übung) | superset (A1/A2/…), params (später)
 block_exercise  Übung im Block mit Reihenfolge und note (nur für dieses Training, z. B. der Plan); existiert auch ohne Sätze
-program         Mehrwochen-Plan eines Nutzers: name, start_date (Montag von Woche 1), archived
+program         Mehrwochen-Plan: Besitzer (user_id), name, shared (für alle sichtbar); start_date/archived der Tabelle werden nicht mehr gelesen
+program_member  Teilnehmer eines Plans (der Besitzer immer): eigenes start_date (Montag von Woche 1) und archived
+planned_session_skip  übersprungene Einheit je Nutzer (skipped_at, skip_note); die Spalten an planned_session werden nicht mehr gelesen
 program_phase   Abschnitt (Mesozyklus) eines Programms: name (pro Programm eindeutig), note; die Excel nennt ihn „Block“
 program_week    Woche (Mikrozyklus): number, phase_id (-> program_phase, null = ohne Abschnitt), deload (nur Anzeige)
-planned_session geplante Einheit einer Woche („A“, „B“): skipped_at, skip_note
+planned_session geplante Einheit einer Woche („A“, „B“)
 planned_item    Planzeile: Übung oder Hinweiszeile (ohne Übung), label (Variante), Soll als Spannen (Sätze, Wdh., Strecke, Zeit), to_max, Last fest oder % einer Bezugsübung, test_kind, rest, note
-exercise_test   Testwert einer Übung (1RM oder Bestleistung), Werte wie ein Satz; set_id, wenn aus einem Trainingssatz (geht mit ihm)
+exercise_test   Testwert eines Nutzers zu einer Übung (1RM oder Bestleistung), Werte wie ein Satz; set_id, wenn aus einem Trainingssatz (geht mit ihm)
 set_log         Satz: weight_kg (null = Körpergewicht), reps, duration_s, distance_m, is_max, note, extra (später), logged_at
 ```
 
@@ -74,7 +76,8 @@ set_log         Satz: weight_kg (null = Körpergewicht), reps, duration_s, dista
   Zusatzlast; ein Wert ist Zusatzgewicht, nie negativ, Assistenz über die Notiz), von den übrigen muss mindestens eines
   gefüllt sein. Eine Übung braucht Wdh., Strecke oder Zeit. Felder kommen jederzeit dazu, entfernen geht nur, solange
   kein Satz einen Wert darin hat (409 `field in use`). Strecke in ganzen Metern (`distance_m`).
-- **Namen und Aliase sind pro Nutzer eindeutig**, über Namen und Aliase hinweg, ohne Groß-/Kleinschreibung. Verglichen
+- **Der Übungskatalog gehört allen Nutzern gemeinsam** (Migration v5 hat gleichnamige Übungen verschiedener Nutzer zusammengeführt, Satzfelder vereinigt). Archivieren, Felder und Namen gelten für alle; „zuletzt genutzt“ ist je Nutzer.
+- **Namen und Aliase sind global eindeutig**, über Namen und Aliase hinweg, ohne Groß-/Kleinschreibung. Verglichen
   wird in JS (`nameKey` in `data/common.ts`, `toLocaleLowerCase("de")`), weil SQLites `lower()` nur ASCII kennt; die
   Unique-Indizes auf `lower(...)` sind nur ein Rückhalt. Konflikt -> 409 mit `taken_by`.
 - **Übungen werden archiviert, nicht gelöscht**, sobald sie benutzt sind (`ON DELETE RESTRICT`, API 409). Archivierte
@@ -87,6 +90,7 @@ set_log         Satz: weight_kg (null = Körpergewicht), reps, duration_s, dista
   begann (nicht die zuletzt eingetragene). So zeigt auch eine nachgetragene Session das Richtige.
 - **„+ Runde“** im Supersatz (`POST /api/blocks/:id/rounds`) legt je Übung genau einen Satz an, alles oder nichts. Die
   Werte schickt der Client (in der Regel sein letzter Satz); der Server rät nichts.
+- **Pläne teilen:** Der Besitzer schaltet `shared` ein; jeder andere sieht den Plan in der Liste (`joined: false`), tritt mit `POST /api/programs/:id/join` (eigenes Startdatum) bei und bearbeitet dann denselben Plan mit (Last-Write-Wins). Nur der Besitzer benennt um, teilt/entteilt und löscht (sonst 403, `ForbiddenError`). Startdatum, Archiv, übersprungen, erledigt (nur eigene Sessions) und Testwerte/1RM sind je Nutzer. Ohne Teilen oder ohne Beitritt: 404. Teilen aus sperrt die Mitglieder aus, ihre Sessions bleiben, die Mitgliedschaft lebt beim erneuten Teilen auf. Zugriffsregel an einer Stelle: `ACCESS`/`programRow` in `data/programs.ts`.
 - **Pläne rechnen, speichern nichts Geplantes:** Gewicht einer %-Zeile = jüngster 1RM der Bezugsübung bis einschließlich
   Trainingstag (für kommende Einheiten der jüngste bekannte) × Prozent, auf 2,5 kg gerundet (`plan.ts`); ohne 1RM bleibt
   `weight_kg` leer. **Erledigt** ist eine Einheit, sobald eine daran hängende Session Sätze hat (`done`), oder wenn sie
@@ -125,7 +129,7 @@ set_log         Satz: weight_kg (null = Körpergewicht), reps, duration_s, dista
 ## API
 
 JSON unter `/api`, alle Pfade relativ zum Ingress-Präfix. Jede Anfrage braucht den Ingress-Nutzer, sonst 401. Fremde oder
-unbekannte IDs ergeben 404 (nie unterscheidbar). Fehler: 400 (zod oder Regel aus den Daten), 404, 409 (Konflikt mit
+unbekannte IDs ergeben 404 (nie unterscheidbar). Fehler: 400 (zod oder Regel aus den Daten), 403 (sichtbar, aber nur für den Besitzer), 404, 409 (Konflikt mit
 Gespeichertem). Optionale Textfelder: `""` und `null` löschen, fehlt das Feld, bleibt es.
 
 | Methode und Pfad | Zweck |
@@ -146,9 +150,10 @@ Gespeichertem). Optionale Textfelder: `""` und `null` löschen, fehlt das Feld, 
 | `DELETE /api/blocks/:id`, `DELETE /api/block-exercises/:id` | Block bzw. Übung aus dem Block entfernen |
 | `POST /api/block-exercises/:id/sets` | 1–20 Sätze (Schnelleingabe „3×5@100“ parst der Client; nur bei Übungen mit genau einem Feld aus Wdh., Strecke, Zeit) |
 | `PATCH`, `DELETE /api/sets/:id` | Satz ändern, löschen |
-| `GET /api/programs` | Programme mit `done`/`total` und `next` (nächste Einheit); aktive zuerst |
+| `GET /api/programs` | eigene und beigetretene Programme mit `done`/`total`, `next`, `shared`, `owned`, `joined`, `owner_name`; aktive zuerst, dann geteilte ohne Beitritt |
+| `POST /api/programs/:id/join`, `DELETE /api/programs/:id/membership` | geteiltem Plan beitreten (`start_date`) bzw. ihn verlassen (nicht der Besitzer) |
 | `POST /api/programs/import` | ganzes Programm aus einer JSON-Datei (`file`, Format wie `examples/programm-beispiel.json`), alles oder nichts; `dry_run: true` prüft und meldet, ohne anzulegen; Antwort `program` + `new_exercises` |
-| `POST /api/programs`, `GET`, `PATCH`, `DELETE /api/programs/:id` | anlegen (`name`, `start_date`); ganzer Baum mit berechneten Gewichten und Tests; Name, Start, `archived`; löschen |
+| `POST /api/programs`, `GET`, `PATCH`, `DELETE /api/programs/:id` | anlegen (`name`, `start_date`); ganzer Baum mit berechneten Gewichten und Tests; `name`, `shared` (nur Besitzer), eigenes `start_date`, `archived`; löschen (nur Besitzer) |
 | `POST /api/programs/:id/weeks`, `PATCH`, `DELETE /api/weeks/:id` | Woche anhängen (`phase` als Name: findet den Abschnitt oder legt ihn an, `deload`, `copy_of` kopiert eine Woche); ändern; löschen |
 | `PATCH`, `DELETE /api/phases/:id` | Abschnitt umbenennen (wirkt auf alle seine Wochen, 409 bei vergebenem Namen) und `note` setzen; auflösen (die Wochen bleiben ohne Abschnitt) |
 | `POST /api/weeks/:id/sessions`, `PATCH`, `DELETE /api/planned-sessions/:id` | Einheit anlegen (`label`); `label`, `skipped` (+ `skip_note`); löschen |

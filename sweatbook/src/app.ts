@@ -4,7 +4,7 @@ import { zValidator } from "@hono/zod-validator";
 import * as z from "zod";
 import type { Db } from "./db.ts";
 import { addBlock, addExerciseToBlock, addRound, deleteBlock, removeBlockExercise, setBlockOrder, updateBlockExercise } from "./data/blocks.ts";
-import { ConflictError, InvalidError, NotFoundError } from "./data/common.ts";
+import { ConflictError, ForbiddenError, InvalidError, NotFoundError } from "./data/common.ts";
 import {
   addPlanItem,
   addPlannedSession,
@@ -14,6 +14,8 @@ import {
   deletePlanItem,
   deletePlannedSession,
   deleteProgram,
+  joinProgram,
+  leaveProgram,
   deleteWeek,
   getProgram,
   listPrograms,
@@ -133,7 +135,7 @@ const planItemBody = planItemPatch.transform(
 );
 const day = z.iso.date();
 const programBody = z.object({ name, start_date: day });
-const programPatch = z.object({ name: name.optional(), start_date: day.optional(), archived: z.boolean().optional() });
+const programPatch = z.object({ name: name.optional(), shared: z.boolean().optional(), start_date: day.optional(), archived: z.boolean().optional() });
 const phase = optionalText(100);
 const weekBody = z.object({ phase, deload: z.boolean().optional(), copy_of: id.optional() });
 const weekPatch = z.object({ phase, deload: z.boolean().optional() });
@@ -254,6 +256,7 @@ export function createApp(db: Db, opts: AppOptions = {}) {
 
   app.onError((err, c) => {
     if (err instanceof NotFoundError) return c.json({ error: `${err.message} not found` }, 404);
+    if (err instanceof ForbiddenError) return c.json({ error: err.message }, 403);
     if (err instanceof ConflictError) return c.json({ error: err.message, ...err.detail }, 409);
     if (err instanceof InvalidError) return c.json({ error: err.message }, 400);
     log.error("unhandled", { method: c.req.method, path: c.req.path, err, stack: err instanceof Error ? err.stack : undefined });
@@ -353,6 +356,13 @@ export function createApp(db: Db, opts: AppOptions = {}) {
   app.patch("/api/programs/:id", zValidator("param", idParam), zValidator("json", programPatch), (c) =>
     c.json(updateProgram(db, c.get("user").id, c.req.valid("param").id, c.req.valid("json"))),
   );
+  app.post("/api/programs/:id/join", zValidator("param", idParam), zValidator("json", z.object({ start_date: day })), (c) =>
+    c.json(joinProgram(db, c.get("user").id, c.req.valid("param").id, c.req.valid("json").start_date)),
+  );
+  app.delete("/api/programs/:id/membership", zValidator("param", idParam), (c) => {
+    leaveProgram(db, c.get("user").id, c.req.valid("param").id);
+    return c.body(null, 204);
+  });
   app.delete("/api/programs/:id", zValidator("param", idParam), (c) => {
     deleteProgram(db, c.get("user").id, c.req.valid("param").id);
     return c.body(null, 204);

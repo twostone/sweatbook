@@ -3,6 +3,8 @@ import type { Db } from "../db.ts";
 
 // 404: the thing does not exist, or belongs to another user (never tell the two apart).
 export class NotFoundError extends Error {}
+// 403: the user may see the thing but not do this to it (only the owner of a shared program deletes or renames it).
+export class ForbiddenError extends Error {}
 // 409: the request is valid but clashes with what is stored (a taken name, an archived exercise, …).
 export class ConflictError extends Error {
   constructor(

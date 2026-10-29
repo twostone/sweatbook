@@ -1,5 +1,5 @@
 import { isoNow, transaction, type Db } from "../db.ts";
-import { ConflictError, InvalidError, nameKey, newId, nextPosition, NotFoundError, tidy, toBool } from "./common.ts";
+import { ConflictError, ForbiddenError, InvalidError, nameKey, newId, nextPosition, NotFoundError, tidy, toBool } from "./common.ts";
 import { insertBlock } from "./blocks.ts";
 import { assertUsable, getExercise } from "./exercises.ts";
 import { ITEM_COLUMNS, PlanContext, planItem, type PlanItem, type PlanItemRow, type Range } from "./plan.ts";
@@ -27,34 +27,60 @@ export type NextWorkout = { planned_session_id: string; week: number; phase: str
 export type ProgramSummary = {
   id: string;
   name: string;
-  start_date: string; // YYYY-MM-DD, the Monday of week 1
-  archived: boolean;
+  start_date: string; // YYYY-MM-DD, the Monday of week 1 (the asking user's own)
+  archived: boolean; // the asking user's own too
+  shared: boolean; // visible to every user, who can join it
+  owned: boolean; // the asking user created it: only they delete, rename and share it
+  joined: boolean; // false = shared by somebody else, not taken up yet
+  owner_name: string | null;
   done: number; // planned sessions done or skipped
   total: number;
   next: NextWorkout | null; // the first open planned session in order
 };
 export type ProgramTree = ProgramSummary & { phases: PhaseTree[]; weeks: WeekTree[]; tests: (ExerciseTest & { exercise_name: string })[] };
 
-type ProgramRow = { id: string; name: string; start_date: string; archived: number };
+type ProgramRow = {
+  id: string;
+  name: string;
+  start_date: string;
+  archived: number;
+  shared: number;
+  user_id: string;
+  owner_name: string | null;
+  member: string | null; // set when the user has joined (the owner always has)
+};
+
+// Who may work with a program: its owner, and the members of a shared one. Everything else is a 404 (never tell
+// "unknown" and "not yours" apart). Takes the user id twice.
+const ACCESS = `(p.user_id = ? OR (p.shared = 1 AND EXISTS (SELECT 1 FROM program_member m WHERE m.program_id = p.id AND m.user_id = ?)))`;
+
+// start_date and archived are the user's own, from their membership; the program's own columns are not read any more.
+const PROGRAM_SELECT = `
+  SELECT p.id, p.name, m.start_date, COALESCE(m.archived, 0) AS archived, p.shared, p.user_id, u.display_name AS owner_name, m.user_id AS member
+  FROM program p JOIN app_user u ON u.id = p.user_id LEFT JOIN program_member m ON m.program_id = p.id AND m.user_id = ?`;
 
 function programRow(db: Db, userId: string, id: string): ProgramRow {
-  const row = db.prepare("SELECT id, name, start_date, archived FROM program WHERE id = ? AND user_id = ?").get(id, userId) as ProgramRow | undefined;
+  const row = db.prepare(`${PROGRAM_SELECT} WHERE p.id = ? AND ${ACCESS}`).get(userId, id, userId, userId) as ProgramRow | undefined;
   if (!row) throw new NotFoundError("program");
+  return row;
+}
+
+function ownedProgramRow(db: Db, userId: string, id: string): ProgramRow {
+  const row = programRow(db, userId, id);
+  if (row.user_id !== userId) throw new ForbiddenError("only the owner may do this");
   return row;
 }
 
 // The program a week / planned session / plan line belongs to; foreign or unknown ids are the same 404.
 function ownerOf(db: Db, userId: string, what: "phase" | "week" | "planned session" | "plan line", id: string): string {
   const sql = {
-    phase: "SELECT p.id FROM program_phase ph JOIN program p ON p.id = ph.program_id WHERE ph.id = ? AND p.user_id = ?",
-    week: "SELECT p.id FROM program_week w JOIN program p ON p.id = w.program_id WHERE w.id = ? AND p.user_id = ?",
-    "planned session":
-      "SELECT p.id FROM planned_session ps JOIN program_week w ON w.id = ps.week_id JOIN program p ON p.id = w.program_id WHERE ps.id = ? AND p.user_id = ?",
-    "plan line":
-      `SELECT p.id FROM planned_item pi JOIN planned_session ps ON ps.id = pi.planned_session_id
-       JOIN program_week w ON w.id = ps.week_id JOIN program p ON p.id = w.program_id WHERE pi.id = ? AND p.user_id = ?`,
+    phase: "SELECT p.id FROM program_phase ph JOIN program p ON p.id = ph.program_id WHERE ph.id = ?",
+    week: "SELECT p.id FROM program_week w JOIN program p ON p.id = w.program_id WHERE w.id = ?",
+    "planned session": "SELECT p.id FROM planned_session ps JOIN program_week w ON w.id = ps.week_id JOIN program p ON p.id = w.program_id WHERE ps.id = ?",
+    "plan line": `SELECT p.id FROM planned_item pi JOIN planned_session ps ON ps.id = pi.planned_session_id
+       JOIN program_week w ON w.id = ps.week_id JOIN program p ON p.id = w.program_id WHERE pi.id = ?`,
   }[what];
-  const row = db.prepare(sql).get(id, userId) as { id: string } | undefined;
+  const row = db.prepare(`${sql} AND ${ACCESS}`).get(id, userId, userId) as { id: string } | undefined;
   if (!row) throw new NotFoundError(what);
   return row.id;
 }
@@ -74,23 +100,24 @@ type SessionRow = {
 
 const WITH_SETS = `EXISTS (SELECT 1 FROM block b JOIN block_exercise be ON be.block_id = b.id JOIN set_log l ON l.block_exercise_id = be.id WHERE b.session_id = s.id)`;
 
-// All planned sessions of a program in training order, with what hangs on them. done_at: when the first session with
-// sets started (the day whose 1RM counts for the weights).
-function sessionRows(db: Db, programId: string): SessionRow[] {
+// All planned sessions of a program in training order, with what hangs on them: the user's own sessions and skips.
+// done_at: when the first session with sets started (the day whose 1RM counts for the weights).
+function sessionRows(db: Db, userId: string, programId: string): SessionRow[] {
   return db
     .prepare(
-      `SELECT ps.id, ps.week_id, w.number AS week, ph.name AS phase, ps.position, ps.label, ps.skipped_at, ps.skip_note,
-         (SELECT s.id FROM session s WHERE s.planned_session_id = ps.id ORDER BY s.started_at DESC LIMIT 1) AS session_id,
-         (SELECT s.started_at FROM session s WHERE s.planned_session_id = ps.id AND ${WITH_SETS} ORDER BY s.started_at LIMIT 1) AS done_at
+      `SELECT ps.id, ps.week_id, w.number AS week, ph.name AS phase, ps.position, ps.label, k.skipped_at, k.skip_note,
+         (SELECT s.id FROM session s WHERE s.planned_session_id = ps.id AND s.user_id = ? ORDER BY s.started_at DESC LIMIT 1) AS session_id,
+         (SELECT s.started_at FROM session s WHERE s.planned_session_id = ps.id AND s.user_id = ? AND ${WITH_SETS} ORDER BY s.started_at LIMIT 1) AS done_at
        FROM planned_session ps JOIN program_week w ON w.id = ps.week_id LEFT JOIN program_phase ph ON ph.id = w.phase_id
+         LEFT JOIN planned_session_skip k ON k.planned_session_id = ps.id AND k.user_id = ?
        WHERE w.program_id = ? ORDER BY w.number, ps.position`,
     )
-    .all(programId) as SessionRow[];
+    .all(userId, userId, userId, programId) as SessionRow[];
 }
 
 const stateOf = (row: SessionRow): PlannedSessionState => (row.done_at !== null ? "done" : row.skipped_at !== null ? "skipped" : "open");
 
-function summarize(program: ProgramRow, rows: SessionRow[]): ProgramSummary {
+function summarize(userId: string, program: ProgramRow, rows: SessionRow[]): ProgramSummary {
   const open = rows.filter((r) => stateOf(r) === "open");
   const first = open[0];
   return {
@@ -98,24 +125,28 @@ function summarize(program: ProgramRow, rows: SessionRow[]): ProgramSummary {
     name: program.name,
     start_date: program.start_date,
     archived: toBool(program.archived),
+    shared: toBool(program.shared),
+    owned: program.user_id === userId,
+    joined: program.member !== null,
+    owner_name: program.owner_name,
     done: rows.length - open.length,
     total: rows.length,
     next: first ? { planned_session_id: first.id, week: first.week, phase: first.phase, label: first.label } : null,
   };
 }
 
-// Active programs first (newest first), then archived ones.
+// Own and joined programs, active ones first (newest first), then archived ones; then the shared ones not joined yet.
 export function listPrograms(db: Db, userId: string): ProgramSummary[] {
   const programs = db
-    .prepare("SELECT id, name, start_date, archived FROM program WHERE user_id = ? ORDER BY archived, created_at DESC, id")
-    .all(userId) as ProgramRow[];
-  return programs.map((p) => summarize(p, sessionRows(db, p.id)));
+    .prepare(`${PROGRAM_SELECT} WHERE p.user_id = ? OR p.shared = 1 ORDER BY (m.user_id IS NULL), COALESCE(m.archived, 0), p.created_at DESC, p.id`)
+    .all(userId, userId) as ProgramRow[];
+  return programs.map((p) => summarize(userId, p, sessionRows(db, userId, p.id)));
 }
 
 // The whole program in one answer, with computed weights and the test values that matter to it.
 export function getProgram(db: Db, userId: string, id: string): ProgramTree {
   const program = programRow(db, userId, id);
-  const rows = sessionRows(db, id);
+  const rows = sessionRows(db, userId, id);
   const ctx = new PlanContext(db, userId);
   const itemsOf = db.prepare(`SELECT ${ITEM_COLUMNS} FROM planned_item WHERE planned_session_id = ? ORDER BY position`);
   const weeks = (
@@ -148,7 +179,7 @@ export function getProgram(db: Db, userId: string, id: string): ProgramTree {
   const tests = db
     .prepare(
       `SELECT ${TEST_COLUMNS}, e.name AS exercise_name FROM exercise_test t JOIN exercise e ON e.id = t.exercise_id
-       WHERE t.exercise_id IN (
+       WHERE t.user_id = ? AND t.exercise_id IN (
          SELECT pi.exercise_id FROM planned_item pi JOIN planned_session ps ON ps.id = pi.planned_session_id
            JOIN program_week w ON w.id = ps.week_id WHERE w.program_id = ? AND pi.test_kind IS NOT NULL
          UNION
@@ -156,45 +187,71 @@ export function getProgram(db: Db, userId: string, id: string): ProgramTree {
            JOIN program_week w ON w.id = ps.week_id WHERE w.program_id = ? AND pi.load_ref_exercise_id IS NOT NULL)
        ORDER BY t.tested_on, e.name`,
     )
-    .all(id, id) as (ExerciseTest & { exercise_name: string })[];
+    .all(userId, id, id) as (ExerciseTest & { exercise_name: string })[];
   const phases = db
     .prepare(
       `SELECT id, name, note FROM program_phase ph WHERE program_id = ?
        ORDER BY (SELECT MIN(number) FROM program_week w WHERE w.phase_id = ph.id), name`,
     )
     .all(id) as PhaseTree[];
-  return { ...summarize(program, rows), phases, weeks, tests };
+  return { ...summarize(userId, program, rows), phases, weeks, tests };
 }
 
 export type ProgramInput = { name: string; start_date: string };
-export type ProgramPatch = { name?: string; start_date?: string; archived?: boolean };
+// name and shared belong to the program (owner only); start_date and archived to the user's own membership.
+export type ProgramPatch = { name?: string; shared?: boolean; start_date?: string; archived?: boolean };
+
+// Also used by the import. The program's own start_date column is still filled (NOT NULL) but not read.
+export function insertProgram(db: Db, userId: string, input: ProgramInput): string {
+  const id = newId();
+  const now = isoNow();
+  db.prepare("INSERT INTO program (id, user_id, name, start_date, archived, created_at) VALUES (?, ?, ?, ?, 0, ?)").run(id, userId, input.name, input.start_date, now);
+  insertMember(db, id, userId, input.start_date);
+  return id;
+}
+
+const insertMember = (db: Db, programId: string, userId: string, startDate: string): void => {
+  db.prepare("INSERT INTO program_member (program_id, user_id, start_date, archived, joined_at) VALUES (?, ?, ?, 0, ?)").run(programId, userId, startDate, isoNow());
+};
 
 export function createProgram(db: Db, userId: string, input: ProgramInput): ProgramTree {
-  const id = newId();
-  db.prepare("INSERT INTO program (id, user_id, name, start_date, archived, created_at) VALUES (?, ?, ?, ?, 0, ?)").run(
-    id,
-    userId,
-    input.name,
-    input.start_date,
-    isoNow(),
-  );
+  const id = transaction(db, () => insertProgram(db, userId, input));
   return getProgram(db, userId, id);
 }
 
 export function updateProgram(db: Db, userId: string, id: string, patch: ProgramPatch): ProgramTree {
   const current = programRow(db, userId, id);
-  db.prepare("UPDATE program SET name = ?, start_date = ?, archived = ? WHERE id = ?").run(
-    patch.name ?? current.name,
-    patch.start_date ?? current.start_date,
-    (patch.archived ?? toBool(current.archived)) ? 1 : 0,
-    id,
-  );
+  if ((patch.name !== undefined || patch.shared !== undefined) && current.user_id !== userId) throw new ForbiddenError("only the owner may do this");
+  transaction(db, () => {
+    db.prepare("UPDATE program SET name = ?, shared = ? WHERE id = ?").run(patch.name ?? current.name, (patch.shared ?? toBool(current.shared)) ? 1 : 0, id);
+    db.prepare("UPDATE program_member SET start_date = ?, archived = ? WHERE program_id = ? AND user_id = ?").run(
+      patch.start_date ?? current.start_date,
+      (patch.archived ?? toBool(current.archived)) ? 1 : 0,
+      id,
+      userId,
+    );
+  });
   return getProgram(db, userId, id);
 }
 
-// Sessions started from the program stay; they only lose the link.
+// Take up a program somebody shared, with a start date of one's own. Joining again changes nothing.
+export function joinProgram(db: Db, userId: string, id: string, startDate: string): ProgramTree {
+  const row = db.prepare(`${PROGRAM_SELECT} WHERE p.id = ? AND p.shared = 1`).get(userId, id) as ProgramRow | undefined;
+  if (!row) throw new NotFoundError("program");
+  if (row.member === null) insertMember(db, id, userId, startDate);
+  return getProgram(db, userId, id);
+}
+
+// Leaving keeps one's sessions; the owner cannot leave (they delete or stop sharing instead).
+export function leaveProgram(db: Db, userId: string, id: string): void {
+  const row = programRow(db, userId, id);
+  if (row.user_id === userId) throw new ForbiddenError("the owner cannot leave");
+  db.prepare("DELETE FROM program_member WHERE program_id = ? AND user_id = ?").run(id, userId);
+}
+
+// Sessions started from the program stay (everybody's); they only lose the link.
 export function deleteProgram(db: Db, userId: string, id: string): void {
-  programRow(db, userId, id);
+  ownedProgramRow(db, userId, id);
   db.prepare("DELETE FROM program WHERE id = ?").run(id);
 }
 
@@ -318,7 +375,7 @@ export function addPlannedSession(db: Db, userId: string, weekId: string, label:
   return getProgram(db, userId, programId);
 }
 
-// skipped: true skips it (skip_note says why, e.g. "vor der App"), false takes the skip back.
+// skipped is the user's own: true skips it for them (skip_note says why, e.g. "vor der App"), false takes the skip back.
 export function updatePlannedSession(
   db: Db,
   userId: string,
@@ -326,18 +383,21 @@ export function updatePlannedSession(
   patch: { label?: string; skipped?: boolean; skip_note?: string | null },
 ): ProgramTree {
   const programId = ownerOf(db, userId, "planned session", id);
-  const current = db.prepare("SELECT label, skipped_at, skip_note FROM planned_session WHERE id = ?").get(id) as {
-    label: string;
-    skipped_at: string | null;
-    skip_note: string | null;
-  };
-  const skipped = patch.skipped ?? current.skipped_at !== null;
-  db.prepare("UPDATE planned_session SET label = ?, skipped_at = ?, skip_note = ? WHERE id = ?").run(
-    patch.label ?? current.label,
-    skipped ? (current.skipped_at ?? isoNow()) : null,
-    skipped ? (patch.skip_note !== undefined ? patch.skip_note : current.skip_note) : null,
-    id,
-  );
+  const current = db.prepare("SELECT label FROM planned_session WHERE id = ?").get(id) as { label: string };
+  const skip = db.prepare("SELECT skipped_at, skip_note FROM planned_session_skip WHERE planned_session_id = ? AND user_id = ?").get(id, userId) as
+    | { skipped_at: string; skip_note: string | null }
+    | undefined;
+  transaction(db, () => {
+    db.prepare("UPDATE planned_session SET label = ? WHERE id = ?").run(patch.label ?? current.label, id);
+    if (!(patch.skipped ?? skip !== undefined)) {
+      db.prepare("DELETE FROM planned_session_skip WHERE planned_session_id = ? AND user_id = ?").run(id, userId);
+    } else {
+      db.prepare(
+        `INSERT INTO planned_session_skip (planned_session_id, user_id, skipped_at, skip_note) VALUES (?, ?, ?, ?)
+         ON CONFLICT (planned_session_id, user_id) DO UPDATE SET skip_note = excluded.skip_note`,
+      ).run(id, userId, skip?.skipped_at ?? isoNow(), patch.skip_note !== undefined ? patch.skip_note : (skip?.skip_note ?? null));
+    }
+  });
   return getProgram(db, userId, programId);
 }
 

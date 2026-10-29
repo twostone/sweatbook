@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.7.0](https://github.com/twostone/sweatbook/compare/v1.6.0...v1.7.0) (2026-10-29)
+
+
+### Neu
+
+* **plan:** Zurück führt zur Herkunft, Überspringen springt zur nächsten Einheit ([#30](https://github.com/twostone/sweatbook/issues/30)) ([d7caf3c](https://github.com/twostone/sweatbook/commit/d7caf3cb60dd0c0c918e4cddfdf38a7e8c69c7c6))
+
 ## [1.6.0](https://github.com/twostone/sweatbook/compare/v1.5.0...v1.6.0) (2026-10-29)
 
 

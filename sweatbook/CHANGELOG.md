@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.5.0](https://github.com/twostone/sweatbook/compare/v1.4.0...v1.5.0) (2026-10-29)
+
+
+### Neu
+
+* **plan:** Abschnitte (Mesozyklen) als eigene Entität, Wochen als Cluster mit Umbruch ([#25](https://github.com/twostone/sweatbook/issues/25)) ([d0a47a9](https://github.com/twostone/sweatbook/commit/d0a47a91bcda14a5fd88c1a8627b8a471d937708))
+* Pläne zwischen Nutzern teilen, gemeinsamer Übungskatalog ([#27](https://github.com/twostone/sweatbook/issues/27)) ([9e87f0c](https://github.com/twostone/sweatbook/commit/9e87f0c5c7ae3426d97572553c3cbdc5907d5356))
+
 ## [1.4.0](https://github.com/twostone/sweatbook/compare/v1.3.0...v1.4.0) (2026-10-29)
 
 

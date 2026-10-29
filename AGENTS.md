@@ -177,9 +177,13 @@ Actions to create and approve pull requests“.
   (`rsvg-convert -w 128 -h 128 web/public/favicon.svg -o icon.png`). Ein `logo.png` ist optional und bewusst nicht da.
 - **Frontend-URLs immer relativ** (`api/sessions`), nie `/api/...`: Die App läuft unter einem wechselnden Ingress-Präfix.
 - **Navigation:** Seiten über Hash-Routen (alle in `web/src/logic/routes.ts`: Start, `#/history`, `#/s/<id>`,
-  `#/s/<id>/b/<id>`, `#/exercises`, `#/exercises/new`, `#/exercises/<id>`, `#/programs`, `#/programs/import`), Sheets belegen einen History-Eintrag ohne URL-Änderung
+  `#/s/<id>/b/<id>`, `#/exercises`, `#/exercises/new`, `#/exercises/<id>`, `#/programs`, `#/programs/import`, `#/programs/<id>`, `#/programs/<id>/s/<einheit>`), Sheets belegen einen History-Eintrag ohne URL-Änderung
   und stehen in `history.state` (Zurück schließt sie, „Übung anlegen“ kehrt in das Sheet zurück). Geschwister (nächster
   Block) per `replace`, „nach oben“ per `goUp`, damit die Zurück-Taste nicht im Kreis läuft.
+- **Training aus dem Plan (Client):** Die Übungsseite zeigt `planned` als „Soll“-Kachel und belegt die nächste Satzzeile
+  aus dem Plan vor (Gewicht, obere Grenze je Soll; was der Plan offen lässt, folgt der alten Regel in `prefill.ts`),
+  solange geplante Sätze übrig sind. Ein Satz auf einer Test-Planzeile erzeugt einen Testwert auf dem Server; der Store
+  holt danach nur `planned` der Übung nach (`refreshTest`), damit „Neuer Testwert · Rückgängig“ stimmt.
 - **Funkloch:** Ungesendete Satzzeilen liegen in `localStorage` (`drafts.ts`, `storage.ts`, jeder Zugriff in try/catch),
   die zuletzt geladene Session und der Nutzer als Anzeige-Cache. Keine Warteschlange: Erneut senden macht der Nutzer.
   502–504 zählen wie fehlendes Netz (Ingress erreicht die App nicht).

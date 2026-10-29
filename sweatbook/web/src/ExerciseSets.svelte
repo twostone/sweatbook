@@ -5,9 +5,11 @@
   import SetRow from "./SetRow.svelte";
   import { draftInput, dropDraft, freshDraft, headings, initialDraft, keepDraft, type DraftRow } from "./drafts";
   import { formatShortDate, summarize } from "./logic/format";
+  import { formatPlanLine, formatTest, setProgress } from "./logic/plan";
   import { parseQuickEntry, quickEntryExample, quickEntryField } from "./logic/quick-entry";
   import type { RowField } from "./logic/set-row";
-  import { addSets } from "./store.svelte";
+  import * as api from "./api";
+  import { addSets, app, guard, loadSession } from "./store.svelte";
   import type { Field, SessionExercise } from "./types";
 
   // The sets of one exercise in a block: logged sets, the highlighted "next set" row and "+ Satz". In a superset the
@@ -58,11 +60,33 @@
     busy = false;
   }
 
+  // "Rückgängig" on a test value a set produced: the sets stay, the session is loaded again without the value.
+  const undoTest = (id: string) =>
+    guard(async () => {
+      await api.deleteTest(id);
+      if (app.session) await loadSession(app.session.id);
+    });
+
   // Only exercises with a single value field have a quick entry (kg + reps, time, distance, …).
   const quickExample = $derived(quickEntryExample(fields));
   const QUICK_VALUE_NAME: Partial<Record<Field, string>> = { reps: "Wdh.", duration: "Zeit", distance: "Meter" };
   const quickValueName = $derived(QUICK_VALUE_NAME[quickEntryField(fields) ?? "reps"]);
 </script>
+
+{#if be.planned}
+  <div class="soll" class:tile={!compact}>
+    <span class="label">Soll{be.planned.label ? ` · ${be.planned.label}` : ""}</span>
+    <span class="num-text">{formatPlanLine(be.planned)}</span>
+    <span class="muted progress">{setProgress(be.planned, be.sets.length)}{be.planned.rest ? ` · Pause ${be.planned.rest}` : ""}</span>
+    {#if be.planned.note}<span class="muted progress">„{be.planned.note}“</span>{/if}
+  </div>
+{/if}
+{#if be.planned?.test}
+  <p class="test-note" role="status">
+    Neuer Testwert · {formatTest(be.planned.test)}
+    <button type="button" class="link-btn" onclick={() => undoTest(be.planned!.test!.id)}>Rückgängig</button>
+  </p>
+{/if}
 
 {#if be.last_time}
   <p class="last" class:tile={!compact}>
@@ -127,6 +151,31 @@
 {/if}
 
 <style>
+  .soll {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 15px;
+  }
+  .soll .num-text {
+    font-size: 18px;
+  }
+  .soll.tile {
+    background: var(--accent-soft);
+    border-radius: var(--radius-field);
+    padding: 10px 12px;
+  }
+  .soll.tile .num-text {
+    font-size: 20px;
+  }
+  .progress {
+    font-size: 14px;
+  }
+  .test-note {
+    margin: 0;
+    font-weight: 700;
+    color: var(--accent-ink);
+  }
   .last {
     margin: 0;
     display: flex;

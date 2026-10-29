@@ -3,14 +3,17 @@ import type {
   ExerciseInput,
   ExercisePatch,
   HistoryEntry,
+  ExerciseTest,
   ImportResult,
   Me,
   ProgramSummary,
+  ProgramTree,
   SessionPatch,
   SessionSummary,
   SessionTree,
   SetInput,
   SetLog,
+  TestInput,
 } from "./types";
 
 // All URLs are relative to the document (never "/api/..."): the app runs under a changing HA ingress prefix.
@@ -122,3 +125,14 @@ export const deleteSet = (id: string) => request<void>("DELETE", `api/sets/${enc
 export const listPrograms = () => request<ProgramSummary[]>("GET", "api/programs");
 // dryRun: the server checks the file and reports what it would create, without creating it.
 export const importProgram = (file: unknown, dryRun: boolean) => request<ImportResult>("POST", "api/programs/import", { file, dry_run: dryRun });
+export const getProgram = (id: string) => request<ProgramTree>("GET", `api/programs/${enc(id)}`);
+// skipped: true skips the planned session, false takes it back.
+export const skipPlannedSession = (id: string, skipped: boolean) =>
+  request<ProgramTree>("PATCH", `api/planned-sessions/${enc(id)}`, { skipped });
+// With times it is entered afterwards (done at once); without it starts now and ends an open session.
+export const startPlannedSession = (id: string, times: { started_at?: string; ended_at?: string } = {}) =>
+  request<SessionTree>("POST", `api/planned-sessions/${enc(id)}/start`, times);
+
+export const listTests = (exerciseId: string) => request<ExerciseTest[]>("GET", `api/exercises/${enc(exerciseId)}/tests`);
+export const createTest = (exerciseId: string, t: TestInput) => request<ExerciseTest>("POST", `api/exercises/${enc(exerciseId)}/tests`, t);
+export const deleteTest = (id: string) => request<void>("DELETE", `api/tests/${enc(id)}`);

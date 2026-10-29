@@ -1,11 +1,12 @@
 <script lang="ts">
   import Icon from "./Icon.svelte";
   import * as api from "./api";
-  import { blockLabel, formatSessionDate, summarize } from "./logic/format";
+  import { blockLabel, formatSessionDate } from "./logic/format";
+  import { cardLine } from "./logic/plan";
   import { blockStatus, doneCount, overviewTarget } from "./logic/flow";
   import { goUp, navigate, paths } from "./router.svelte";
   import { changeSession, finishSession, openSheet } from "./store.svelte";
-  import type { SessionBlock, SessionExercise, SessionTree } from "./types";
+  import type { SessionBlock, SessionTree } from "./types";
 
   // The overview of one session, live or done: a card per block, "Weiter" to the block being worked on.
   let { session }: { session: SessionTree } = $props();
@@ -23,11 +24,7 @@
     changeSession(() => api.setBlockOrder(session.id, ids));
   }
 
-  function line(be: SessionExercise): string {
-    if (be.sets.length) return summarize(be.sets, be.exercise.fields);
-    if (be.last_time) return `Letztes Mal ${summarize(be.last_time.sets, be.exercise.fields)}`;
-    return "Noch keine Sätze";
-  }
+  const line = cardLine;
 
   const statusText = { done: "erledigt", current: "läuft", open: "offen" } as const;
   const cardLabel = (block: SessionBlock, i: number) =>
@@ -64,6 +61,9 @@
   {/if}
 
   <main>
+    {#each session.plan?.notes ?? [] as note (note)}
+      <p class="plan-note muted">{note}</p>
+    {/each}
     {#each session.blocks as block, i (block.id)}
       {@const status = blockStatus(session.blocks, i)}
       <div class="card-row">
@@ -126,6 +126,11 @@
 </div>
 
 <style>
+  .plan-note {
+    margin: 0;
+    padding: 0 4px;
+    font-style: italic;
+  }
   .head {
     display: flex;
     align-items: flex-start;

@@ -21,6 +21,7 @@ const exercise = (sets: SetLog[], lastSets: SetLog[] | null): SessionExercise =>
   exercise: { id: "e", name: "Kniebeuge", fields: ["weight", "reps"], archived: false },
   note: null,
   sets,
+  planned: null,
   last_time: lastSets ? { session_id: "s0", started_at: "2026-10-17T11:00:00.000Z", sets: lastSets } : null,
 });
 
@@ -39,4 +40,40 @@ test("the first set copies the first one of last time", () => {
 
 test("nothing to copy gives an empty row", () => {
   assert.deepEqual(draftFor(exercise([], null)), { weight_kg: null, reps: null, duration_s: null, distance_m: null });
+});
+
+const planned = (over: Partial<NonNullable<SessionExercise["planned"]>>): SessionExercise["planned"] => ({
+  id: "pi",
+  position: 1,
+  exercise: { id: "e", name: "Kniebeuge", fields: ["weight", "reps"] },
+  label: null,
+  sets: [4, 4],
+  reps: [3, 5],
+  distance_m: null,
+  duration_s: null,
+  to_max: false,
+  load_kg: null,
+  load_pct: 85,
+  load_ref: null,
+  weight_kg: 97.5,
+  test_kind: null,
+  rest: null,
+  note: null,
+  test: null,
+  ...over,
+});
+
+test("planned sets left: the row starts with the plan (weight, upper bound of the reps), not the previous set", () => {
+  const e = { ...exercise([log(95, 4)], [log(90, 5)]), planned: planned({}) };
+  assert.deepEqual(draftFor(e), { weight_kg: 97.5, reps: 5, duration_s: null, distance_m: null });
+});
+
+test("a target the plan leaves open falls back to the usual rule", () => {
+  const e = { ...exercise([log(45, 20)], null), planned: planned({ to_max: true, reps: null, weight_kg: 45 }) };
+  assert.deepEqual(draftFor(e), { weight_kg: 45, reps: 20, duration_s: null, distance_m: null });
+});
+
+test("all planned sets done: back to the previous set", () => {
+  const e = { ...exercise([log(97.5, 5), log(97.5, 4), log(97.5, 4), log(97.5, 3)], null), planned: planned({}) };
+  assert.deepEqual(draftFor(e), { weight_kg: 97.5, reps: 3, duration_s: null, distance_m: null });
 });

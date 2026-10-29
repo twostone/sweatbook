@@ -5,7 +5,7 @@
   import { guard } from "./store.svelte";
   import type { ProgramSummary } from "./types";
 
-  // The programs (plans): progress and the next workout. Opening one comes with the training from the plan.
+  // The programs (plans): progress and the next workout. Opening one shows its weeks.
   let programs = $state<ProgramSummary[]>([]);
   let loaded = $state(false);
 
@@ -20,7 +20,14 @@
 </script>
 
 {#snippet card(p: ProgramSummary)}
-  <div class="card program">
+  <a
+    class="card program"
+    href={paths.program(p.id)}
+    onclick={(e) => {
+      e.preventDefault();
+      navigate(paths.program(p.id));
+    }}
+  >
     <span class="name">{p.name}</span>
     <span class="muted">{p.done} von {p.total} Einheiten</span>
     {#if p.next}
@@ -28,7 +35,7 @@
     {:else if p.total > 0}
       <span class="num-text">Abgeschlossen</span>
     {/if}
-  </div>
+  </a>
 {/snippet}
 
 <div class="page">

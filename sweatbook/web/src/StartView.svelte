@@ -3,12 +3,23 @@
   import SessionRow from "./SessionRow.svelte";
   import { formatSessionDate } from "./logic/format";
   import { navigate, paths } from "./router.svelte";
-  import { app, openSheet, refreshSessions, startSession } from "./store.svelte";
+  import * as api from "./api";
+  import { weekDates } from "./logic/plan";
+  import { app, guard, openSheet, refreshSessions, startSession } from "./store.svelte";
+  import type { ProgramSummary } from "./types";
 
   // Start: carry on with the open session, start a new one or enter a past one, the latest sessions, and the way to
   // the history and the catalog.
   $effect(() => {
     refreshSessions();
+  });
+
+  // Next workout of every running program (a finished one shows "abgeschlossen" until it is archived on its page).
+  let programs = $state<ProgramSummary[]>([]);
+  $effect(() => {
+    guard(async () => {
+      programs = (await api.listPrograms()).filter((p) => !p.archived);
+    });
   });
 
   const open = $derived(app.sessions.find((s) => s.ended_at === null));
@@ -47,6 +58,29 @@
       </a>
     {/if}
 
+    {#each programs as p (p.id)}
+      <a
+        class="card next-workout"
+        href={p.next ? paths.plannedSession(p.id, p.next.planned_session_id) : paths.program(p.id)}
+        onclick={(e) => {
+          e.preventDefault();
+          navigate(p.next ? paths.plannedSession(p.id, p.next.planned_session_id) : paths.program(p.id));
+        }}
+      >
+        <span class="body">
+          <span class="kicker">{p.name}</span>
+          {#if p.next}
+            <span class="name">Nächstes Workout: Woche {p.next.week} · {p.next.label}</span>
+            <span class="muted">{p.next.phase ? `${p.next.phase} · ` : ""}{weekDates(p.start_date, p.next.week)}</span>
+          {:else}
+            <span class="name">Abgeschlossen</span>
+            <span class="muted">{p.done} von {p.total} Einheiten</span>
+          {/if}
+        </span>
+        <Icon name="chevron" size={20} />
+      </a>
+    {/each}
+
     {#if recent.length}
       <div class="section">
         <h2 class="label">Zuletzt</h2>
@@ -62,8 +96,8 @@
   </main>
 
   <footer>
-    <button type="button" class="btn big" onclick={() => navigate(paths.catalog())}><Icon name="list" />Katalog</button>
-    <button type="button" class="btn big" onclick={() => navigate(paths.programs())}><Icon name="list" />Pläne</button>
+    <button type="button" class="btn big side" onclick={() => navigate(paths.catalog())}>Katalog</button>
+    <button type="button" class="btn big side" onclick={() => navigate(paths.programs())}>Pläne</button>
     <button type="button" class="btn big grow" class:primary={!open} disabled={busy} onclick={start}>
       <Icon name="plus" />Neue Session
     </button>
@@ -80,8 +114,25 @@
   .head p {
     margin: 6px 0 0;
   }
+  /* Katalog and Pläne next to "Neue Session" must fit a 375 px phone. */
+  .side {
+    flex: none;
+    padding: 0 12px;
+    font-size: 15px;
+  }
   .grow {
     flex: 1;
+  }
+  .next-workout {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px;
+    color: var(--ink);
+  }
+  .next-workout :global(svg) {
+    color: var(--muted);
+    flex: none;
   }
   .live {
     display: flex;

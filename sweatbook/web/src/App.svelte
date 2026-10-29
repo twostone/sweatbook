@@ -5,9 +5,12 @@
   import CatalogView from "./CatalogView.svelte";
   import ExerciseView from "./ExerciseView.svelte";
   import HistoryView from "./HistoryView.svelte";
+  import LogPlannedSheet from "./LogPlannedSheet.svelte";
   import LogSessionSheet from "./LogSessionSheet.svelte";
   import ImportView from "./ImportView.svelte";
   import NewExerciseView from "./NewExerciseView.svelte";
+  import PlannedView from "./PlannedView.svelte";
+  import ProgramView from "./ProgramView.svelte";
   import ProgramsView from "./ProgramsView.svelte";
   import SessionSheet from "./SessionSheet.svelte";
   import SessionView from "./SessionView.svelte";
@@ -51,6 +54,14 @@
     <CatalogView />
   {:else if route.name === "programs"}
     <ProgramsView />
+  {:else if route.name === "program"}
+    {#key route.programId}
+      <ProgramView programId={route.programId} />
+    {/key}
+  {:else if route.name === "planned-session"}
+    {#key route.plannedId}
+      <PlannedView programId={route.programId} plannedId={route.plannedId} />
+    {/key}
   {:else if route.name === "program-import"}
     <ImportView />
   {:else if route.name === "exercise"}
@@ -76,6 +87,8 @@
   <SessionSheet session={app.session} />
 {:else if app.sheet.kind === "log-session"}
   <LogSessionSheet />
+{:else if app.sheet.kind === "log-planned"}
+  <LogPlannedSheet plannedId={app.sheet.plannedId} />
 {:else if app.sheet.kind === "block-menu" && app.session}
   <BlockMenuSheet session={app.session} blockId={app.sheet.blockId} />
 {/if}

@@ -7,8 +7,10 @@
 Eine App zum Tracken und Planen des eigenen Trainings. Sie läuft als App (früher „Add-on“) direkt in Home Assistant,
 erscheint in der Seitenleiste und braucht keine eigene Anmeldung: Jeder Home-Assistant-Nutzer hat seine eigenen Daten.
 
-**Stand:** Phase 1 im Aufbau. Das Backend (Übungskatalog, Sessions, Blöcke und Supersätze, Sätze) steht, die Oberfläche
-folgt. Später kommen Planung (Vorlagen, Programme, %-vom-1RM), CrossFit, Zirkel und Ausdauer (Laufen, Paddeln, Rudern) dazu.
+**Stand:** Training loggen (live im Gym und nachträglich, mit selbst gepflegtem Übungskatalog) und Mehrwochen-Pläne
+(Soll-Werte, %-vom-1RM, Testwerte, „Nächstes Workout“) sind gebaut; Pläne lassen sich aus einer JSON-Datei importieren
+(`sweatbook/examples/programm-beispiel.json`) und in der App bearbeiten. Später kommen CrossFit, Zirkel und Ausdauer
+(Laufen, Paddeln, Rudern) dazu.
 
 ## Installation
 

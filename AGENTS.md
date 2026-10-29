@@ -5,7 +5,7 @@ Anleitung für Coding-Agents und Mitwirkende. Kurz halten, bei Änderungen an Ar
 ## Projekt
 
 Trainings-Tracker als Home-Assistant-App (Ingress). Phase 1: Krafttraining loggen, live im Gym und nachträglich, mit
-selbst gepflegtem Übungskatalog. Das Datenmodell ist schon auf Planung, CrossFit und Ausdauer ausgelegt, die
+selbst gepflegtem Übungskatalog. Phase 2 (im Aufbau): Programme mit Soll-Werten, Testwerte, Training aus dem Plan. Das Datenmodell ist schon auf Planung, CrossFit und Ausdauer ausgelegt, die
 Oberfläche noch nicht. Grundsatz: **KISS und YAGNI** mit Augenmaß auf spätere Phasen. Nichts bauen, was nicht
 ausdrücklich gebraucht wird. Aufbau, Pipeline und viele Regeln sind von [twostone/meal-planner](https://github.com/twostone/meal-planner) übernommen.
 
@@ -24,7 +24,7 @@ sweatbook/               die App (Docker-Build-Kontext)
   Dockerfile             zweistufig, node:24-alpine
   src/                   Backend: Hono + node:sqlite
     db.ts                  Verbindung, Migrationen, Transaktionen
-    data/                  Datenzugriff, ein Modul pro Entität (users, exercises, sessions, blocks, sets) + common
+    data/                  Datenzugriff, ein Modul pro Entität (users, exercises, sessions, blocks, sets, programs, tests) + plan (Planzeile lesen, Gewicht rechnen) + common
     app.ts, server.ts      API, Ingress-Sperre, Identität, Start
     log.ts, options.ts     Logger (logfmt) und App-Optionen (wie meal-planner)
   web/                   Frontend: Svelte 5 + Vite (Runes), Hash-Routen in router.svelte.ts, Zustand in store.svelte.ts
@@ -55,6 +55,11 @@ exercise_alias  weitere Namen für die Suche
 session         ein Training: title, started_at, ended_at (null = läuft), note
 block           geordnet in der Session: type straight (eine Übung) | superset (A1/A2/…), params (später)
 block_exercise  Übung im Block mit Reihenfolge und note (nur für dieses Training, z. B. der Plan); existiert auch ohne Sätze
+program         Mehrwochen-Plan eines Nutzers: name, start_date (Montag von Woche 1), archived
+program_week    Woche: number, phase (Name des Abschnitts, in der Excel „Block“), deload (nur Anzeige)
+planned_session geplante Einheit einer Woche („A“, „B“): skipped_at, skip_note
+planned_item    Planzeile: Übung oder Hinweiszeile (ohne Übung), label (Variante), Soll als Spannen (Sätze, Wdh., Strecke, Zeit), to_max, Last fest oder % einer Bezugsübung, test_kind, rest, note
+exercise_test   Testwert einer Übung (1RM oder Bestleistung), Werte wie ein Satz; set_id, wenn aus einem Trainingssatz (geht mit ihm)
 set_log         Satz: weight_kg (null = Körpergewicht), reps, duration_s, distance_m, is_max, note, extra (später), logged_at
 ```
 
@@ -77,6 +82,15 @@ set_log         Satz: weight_kg (null = Körpergewicht), reps, duration_s, dista
   begann (nicht die zuletzt eingetragene). So zeigt auch eine nachgetragene Session das Richtige.
 - **„+ Runde“** im Supersatz (`POST /api/blocks/:id/rounds`) legt je Übung genau einen Satz an, alles oder nichts. Die
   Werte schickt der Client (in der Regel sein letzter Satz); der Server rät nichts.
+- **Pläne rechnen, speichern nichts Geplantes:** Gewicht einer %-Zeile = jüngster 1RM der Bezugsübung bis einschließlich
+  Trainingstag (für kommende Einheiten der jüngste bekannte) × Prozent, auf 2,5 kg gerundet (`plan.ts`); ohne 1RM bleibt
+  `weight_kg` leer. **Erledigt** ist eine Einheit, sobald eine daran hängende Session Sätze hat (`done`), oder wenn sie
+  übersprungen ist (`skipped`); „Nächstes Workout“ ist die erste offene nach Woche und Position. Eine Session aus dem
+  Plan (`planned_session_id`) hat je Planzeile mit Übung einen Block (`block_exercise.planned_item_id`) und ist danach
+  eine normale Session; Löschen von Plan oder Planzeile löst nur die Verweise.
+- **Testwerte aus dem Training:** Hat die Planzeile eines Block-Eintrags `test_kind`, hält `syncSessionTest`
+  (`data/tests.ts`) nach jeder Änderung seiner Sätze einen Testwert aktuell (1RM: schwerster Satz; Bestleistung: meiste
+  Wdh., dann Strecke, dann Zeit). Er steht in `planned.test` der Session; „Rückgängig“ = `DELETE /api/tests/:id`.
 - `extra` (JSON) und `block.params` sind für spätere Sportarten und Blocktypen reserviert und in Phase 1 leer.
 
 ## SQL-Regeln (portabel für einen späteren Umzug auf Postgres)
@@ -120,8 +134,16 @@ Gespeichertem). Optionale Textfelder: `""` und `null` löschen, fehlt das Feld, 
 | `DELETE /api/blocks/:id`, `DELETE /api/block-exercises/:id` | Block bzw. Übung aus dem Block entfernen |
 | `POST /api/block-exercises/:id/sets` | 1–20 Sätze (Schnelleingabe „3×5@100“ parst der Client; nur bei Übungen mit genau einem Feld aus Wdh., Strecke, Zeit) |
 | `PATCH`, `DELETE /api/sets/:id` | Satz ändern, löschen |
+| `GET /api/programs` | Programme mit `done`/`total` und `next` (nächste Einheit); aktive zuerst |
+| `POST /api/programs`, `GET`, `PATCH`, `DELETE /api/programs/:id` | anlegen (`name`, `start_date`); ganzer Baum mit berechneten Gewichten und Tests; Name, Start, `archived`; löschen |
+| `POST /api/programs/:id/weeks`, `PATCH`, `DELETE /api/weeks/:id` | Woche anhängen (`phase`, `deload`, `copy_of` kopiert eine Woche); ändern; löschen |
+| `POST /api/weeks/:id/sessions`, `PATCH`, `DELETE /api/planned-sessions/:id` | Einheit anlegen (`label`); `label`, `skipped` (+ `skip_note`); löschen |
+| `POST /api/planned-sessions/:id/items`, `PATCH`, `DELETE /api/planned-items/:id` | Planzeile (Spannen `[min, max]`; Soll nur in Feldern der Übung; `load_kg` oder `load_pct` + `load_ref_exercise_id`); ändern, löschen |
+| `PUT /api/planned-sessions/:id/item-order` | Reihenfolge der Planzeilen (`item_ids`) |
+| `POST /api/planned-sessions/:id/start` | Session aus der Einheit (`started_at`/`ended_at` nur zum Nachtragen) |
+| `GET`, `POST /api/exercises/:id/tests`, `DELETE /api/tests/:id` | Testwerte lesen, eintragen (`kind` `one_rm`/`best`), löschen |
 
-Änderungen an Blöcken antworten mit der ganzen Session, damit der Client einfach ersetzt, was er zeigt.
+Änderungen an Blöcken antworten mit der ganzen Session, Änderungen am Plan mit dem ganzen Programm, damit der Client einfach ersetzt, was er zeigt.
 
 ## Sicherheit
 

@@ -22,8 +22,8 @@ export const newId = (): string => randomUUID();
 export const tidy = (text: string): string => text.trim().replace(/\s+/g, " ");
 export const nameKey = (text: string): string => tidy(text).toLocaleLowerCase("de");
 
-// Next free position in an ordered list (blocks of a session, exercises of a block, sets of an exercise).
-export function nextPosition(db: Db, table: "block" | "block_exercise" | "set_log", parentColumn: string, parentId: string): number {
+// Next free position in an ordered list (blocks of a session, exercises of a block, sets of an exercise, plan lines).
+export function nextPosition(db: Db, table: "block" | "block_exercise" | "set_log" | "planned_session" | "planned_item", parentColumn: string, parentId: string): number {
   const row = db.prepare(`SELECT MAX(position) AS p FROM ${table} WHERE ${parentColumn} = ?`).get(parentId) as { p: number | null };
   return (row.p ?? -1) + 1;
 }

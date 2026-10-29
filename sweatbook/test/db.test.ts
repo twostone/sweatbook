@@ -88,9 +88,39 @@ test("migration v4: existing data stays, sessions and block exercises get no pla
     INSERT INTO block (id, session_id, position, type) VALUES ('b', 's', 0, 'straight');
     INSERT INTO block_exercise (id, block_id, exercise_id, position) VALUES ('be', 'b', 'e', 0);
   `);
-  migrate(db);
+  migrate(db, MIGRATIONS.slice(0, 4));
   assert.equal(schemaVersion(db), 4);
   assert.deepEqual({ ...db.prepare("SELECT planned_session_id FROM session").get() }, { planned_session_id: null });
   assert.deepEqual({ ...db.prepare("SELECT planned_item_id FROM block_exercise").get() }, { planned_item_id: null });
   assert.deepEqual({ ...db.prepare("SELECT COUNT(*) AS n FROM program").get() }, { n: 0 });
+});
+
+test("migration v5: week phase texts become one phase per program and name, the old column stays", () => {
+  const db = new DatabaseSync(":memory:");
+  db.exec("PRAGMA foreign_keys = ON");
+  migrate(db, MIGRATIONS.slice(0, 4));
+  db.exec(`
+    INSERT INTO app_user (id, ha_user_id, created_at) VALUES ('u', 'ha', 'x');
+    INSERT INTO program (id, user_id, name, start_date, created_at) VALUES ('p1', 'u', 'Eins', '2026-01-05', 'x'), ('p2', 'u', 'Zwei', '2026-01-05', 'x');
+    INSERT INTO program_week (id, program_id, number, phase) VALUES
+      ('w1', 'p1', 1, 'Aufbau'), ('w2', 'p1', 2, 'aufbau'), ('w3', 'p1', 3, 'Test'), ('w4', 'p1', 4, NULL), ('w5', 'p1', 5, 'Aufbau'),
+      ('v1', 'p2', 1, 'Aufbau');
+  `);
+  migrate(db);
+  assert.equal(schemaVersion(db), 5);
+  const weeks = db
+    .prepare("SELECT w.id, p.name, p.program_id, w.phase FROM program_week w LEFT JOIN program_phase p ON p.id = w.phase_id ORDER BY w.id")
+    .all()
+    .map((r) => ({ ...r }));
+  assert.deepEqual(weeks, [
+    { id: "v1", name: "Aufbau", program_id: "p2", phase: "Aufbau" },
+    { id: "w1", name: "Aufbau", program_id: "p1", phase: "Aufbau" },
+    { id: "w2", name: "Aufbau", program_id: "p1", phase: "aufbau" },
+    { id: "w3", name: "Test", program_id: "p1", phase: "Test" },
+    { id: "w4", name: null, program_id: null, phase: null },
+    { id: "w5", name: "Aufbau", program_id: "p1", phase: "Aufbau" },
+  ]);
+  const same = db.prepare("SELECT COUNT(DISTINCT phase_id) AS n FROM program_week WHERE id IN ('w1', 'w2', 'w5')").get() as { n: number };
+  assert.equal(same.n, 1);
+  assert.deepEqual({ ...db.prepare("SELECT COUNT(*) AS n FROM program_phase").get() }, { n: 3 });
 });

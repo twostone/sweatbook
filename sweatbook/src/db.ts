@@ -171,6 +171,28 @@ export const MIGRATIONS: readonly string[] = [
   ALTER TABLE block_exercise ADD COLUMN planned_item_id TEXT REFERENCES planned_item(id) ON DELETE SET NULL;
   CREATE INDEX session_planned ON session(planned_session_id);
   `,
+  // v5: the phase of a program (mesocycle) becomes its own row instead of a text on every week. program_week.phase stays
+  // as an unused column so an older app version still finds its data; a later migration drops it. The ids are made by
+  // SQLite here, a one-time exception to "ids come from the app".
+  `
+  CREATE TABLE program_phase (
+    id TEXT PRIMARY KEY,
+    program_id TEXT NOT NULL REFERENCES program(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    note TEXT
+  ) STRICT;
+  CREATE UNIQUE INDEX program_phase_name ON program_phase(program_id, lower(name));
+
+  ALTER TABLE program_week ADD COLUMN phase_id TEXT REFERENCES program_phase(id) ON DELETE SET NULL;
+  CREATE INDEX program_week_phase ON program_week(phase_id);
+
+  INSERT INTO program_phase (id, program_id, name)
+    SELECT lower(hex(randomblob(16))), program_id, MIN(phase) FROM program_week
+    WHERE phase IS NOT NULL AND phase <> '' GROUP BY program_id, lower(phase);
+  UPDATE program_week SET phase_id = (
+    SELECT p.id FROM program_phase p WHERE p.program_id = program_week.program_id AND lower(p.name) = lower(program_week.phase))
+    WHERE phase IS NOT NULL AND phase <> '';
+  `,
 ];
 
 export type Db = DatabaseSync;

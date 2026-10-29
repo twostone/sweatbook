@@ -2,7 +2,7 @@ import { isoNow, transaction, type Db } from "../db.ts";
 import { InvalidError, nameKey, newId } from "./common.ts";
 import { assertUsable, insertExercise, listExercises, type Exercise, type Field } from "./exercises.ts";
 import type { Range } from "./plan.ts";
-import { checkItem, getProgram, insertPlannedSession, writeItem, type PlanItemInput, type ProgramTree } from "./programs.ts";
+import { checkItem, getProgram, insertPlannedSession, resolvePhase, writeItem, type PlanItemInput, type ProgramTree } from "./programs.ts";
 import { createTest, type TestKind } from "./tests.ts";
 
 // A whole program from one JSON file (the shape is validated in app.ts; what depends on the catalog, here). Exercises are
@@ -89,11 +89,11 @@ function run(db: Db, userId: string, file: ImportFile): ImportResult {
     if (seen.has(week.number)) throw new InvalidError(`weeks: number ${week.number} twice`);
     seen.add(week.number);
     const weekId = newId();
-    db.prepare("INSERT INTO program_week (id, program_id, number, phase, deload) VALUES (?, ?, ?, ?, ?)").run(
+    db.prepare("INSERT INTO program_week (id, program_id, number, phase_id, deload) VALUES (?, ?, ?, ?, ?)").run(
       weekId,
       programId,
       week.number,
-      week.phase ?? null,
+      resolvePhase(db, programId, week.phase ?? null),
       week.deload ? 1 : 0,
     );
     for (const session of week.sessions) {

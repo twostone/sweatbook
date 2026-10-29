@@ -8,9 +8,9 @@
   import { weekDates } from "./logic/plan";
   import { goUp, paths } from "./router.svelte";
   import { guard } from "./store.svelte";
-  import type { PlanItem, PlannedSession, PlanWeek, ProgramTree } from "./types";
+  import type { PlanItem, PlannedSession, PlanPhase, PlanWeek, ProgramTree } from "./types";
 
-  // Edits what the target names: the program, a week, a planned session or one line. Every change answers with the whole
+  // Edits what the target names: the program, a phase, a week, a planned session or one line. Every change answers with the whole
   // program, which goes up through onprogram. The parent keys this component by target, so the form starts fresh.
   let {
     program,
@@ -36,9 +36,11 @@
   }
 
   const found = $derived(find(program, target));
+  const phaseOf = (p: ProgramTree, t: PlanTarget): PlanPhase | null => (t.kind === "phase" ? (p.phases.find((x) => x.id === t.id) ?? null) : null);
+  const foundPhase = $derived(phaseOf(program, target));
   // A target that was deleted (or never existed after a reload) closes the editor.
   $effect(() => {
-    const gone = target.kind === "week" ? !found.week : target.kind === "session" || target.kind === "new-item" ? !found.session : target.kind === "item" ? !found.item : false;
+    const gone = target.kind === "phase" ? !foundPhase : target.kind === "week" ? !found.week : target.kind === "session" || target.kind === "new-item" ? !found.session : target.kind === "item" ? !found.item : false;
     if (gone) onselect(null);
   });
 
@@ -55,6 +57,9 @@
   // Program
   let name = $state(start.program.name);
   let startDate = $state(start.program.start_date);
+  // Phase
+  let phaseName = $state(phaseOf(start.program, start.target)?.name ?? "");
+  let phaseNote = $state(phaseOf(start.program, start.target)?.note ?? "");
   // Week
   let phase = $state(find(start.program, start.target).week?.phase ?? "");
   let deload = $state(find(start.program, start.target).week?.deload ?? false);
@@ -115,6 +120,14 @@
       busy = false;
       if (ok) goUp(paths.programs());
     })}
+  {:else if target.kind === "phase" && foundPhase}
+    {@const ph = foundPhase}
+    <h2 class="label">Abschnitt</h2>
+    <label>Name<input class="field" bind:value={phaseName} maxlength="100" /></label>
+    <label>Notiz<textarea class="field" rows="3" bind:value={phaseNote} maxlength="1000" placeholder="z. B. Ziel des Abschnitts"></textarea></label>
+    <button type="button" class="btn strong" disabled={busy || !phaseName.trim()} onclick={() => run(() => api.updatePhase(ph.id, { name: phaseName.trim(), note: phaseNote.trim() || null }))}>Speichern</button>
+    <p class="muted">Gilt für alle Wochen des Abschnitts.</p>
+    {@render danger("Abschnitt auflösen", () => run(() => api.deletePhase(ph.id)))}
   {:else if target.kind === "week" && found.week}
     {@const week = found.week}
     <h2 class="label">Woche {week.number} · {weekDates(program.start_date, week.number)}</h2>

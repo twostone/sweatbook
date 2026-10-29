@@ -60,7 +60,8 @@ session         ein Training: title, started_at, ended_at (null = läuft), note
 block           geordnet in der Session: type straight (eine Übung) | superset (A1/A2/…), params (später)
 block_exercise  Übung im Block mit Reihenfolge und note (nur für dieses Training, z. B. der Plan); existiert auch ohne Sätze
 program         Mehrwochen-Plan eines Nutzers: name, start_date (Montag von Woche 1), archived
-program_week    Woche: number, phase (Name des Abschnitts, in der Excel „Block“), deload (nur Anzeige)
+program_phase   Abschnitt (Mesozyklus) eines Programms: name (pro Programm eindeutig), note; die Excel nennt ihn „Block“
+program_week    Woche (Mikrozyklus): number, phase_id (-> program_phase, null = ohne Abschnitt), deload (nur Anzeige)
 planned_session geplante Einheit einer Woche („A“, „B“): skipped_at, skip_note
 planned_item    Planzeile: Übung oder Hinweiszeile (ohne Übung), label (Variante), Soll als Spannen (Sätze, Wdh., Strecke, Zeit), to_max, Last fest oder % einer Bezugsübung, test_kind, rest, note
 exercise_test   Testwert einer Übung (1RM oder Bestleistung), Werte wie ein Satz; set_id, wenn aus einem Trainingssatz (geht mit ihm)
@@ -96,6 +97,9 @@ set_log         Satz: weight_kg (null = Körpergewicht), reps, duration_s, dista
   `fields` angelegt; `start_week` setzt frühere Einheiten auf übersprungen mit „vor der App“. Fehler nennen die Stelle
   („week 2 A, line 2: …“). Echte Plandateien enthalten Testwerte und kommen nie ins (öffentliche) Repository; dort liegt
   nur das Beispiel mit erfundenen Werten.
+- **Abschnitte:** Ein Abschnitt hat nur Namen und Notiz; seine Reihenfolge folgt der Wochennummer, die Wochen eines Abschnitts müssen nicht
+  zusammenhängen (die Oberfläche zeigt benachbarte Wochen als Cluster). Ein Abschnitt ohne Wochen verschwindet mit seiner letzten
+  Woche (`pruneEmptyPhases`). `program_week.phase` (Text, vor Migration 5) wird nicht mehr gelesen und fällt in einer späteren Migration weg.
 - **Testwerte aus dem Training:** Hat die Planzeile eines Block-Eintrags `test_kind`, hält `syncSessionTest`
   (`data/tests.ts`) nach jeder Änderung seiner Sätze einen Testwert aktuell (1RM: schwerster Satz; Bestleistung: meiste
   Wdh., dann Strecke, dann Zeit). Er steht in `planned.test` der Session; „Rückgängig“ = `DELETE /api/tests/:id`.
@@ -145,7 +149,8 @@ Gespeichertem). Optionale Textfelder: `""` und `null` löschen, fehlt das Feld, 
 | `GET /api/programs` | Programme mit `done`/`total` und `next` (nächste Einheit); aktive zuerst |
 | `POST /api/programs/import` | ganzes Programm aus einer JSON-Datei (`file`, Format wie `examples/programm-beispiel.json`), alles oder nichts; `dry_run: true` prüft und meldet, ohne anzulegen; Antwort `program` + `new_exercises` |
 | `POST /api/programs`, `GET`, `PATCH`, `DELETE /api/programs/:id` | anlegen (`name`, `start_date`); ganzer Baum mit berechneten Gewichten und Tests; Name, Start, `archived`; löschen |
-| `POST /api/programs/:id/weeks`, `PATCH`, `DELETE /api/weeks/:id` | Woche anhängen (`phase`, `deload`, `copy_of` kopiert eine Woche); ändern; löschen |
+| `POST /api/programs/:id/weeks`, `PATCH`, `DELETE /api/weeks/:id` | Woche anhängen (`phase` als Name: findet den Abschnitt oder legt ihn an, `deload`, `copy_of` kopiert eine Woche); ändern; löschen |
+| `PATCH`, `DELETE /api/phases/:id` | Abschnitt umbenennen (wirkt auf alle seine Wochen, 409 bei vergebenem Namen) und `note` setzen; auflösen (die Wochen bleiben ohne Abschnitt) |
 | `POST /api/weeks/:id/sessions`, `PATCH`, `DELETE /api/planned-sessions/:id` | Einheit anlegen (`label`); `label`, `skipped` (+ `skip_note`); löschen |
 | `POST /api/planned-sessions/:id/items`, `PATCH`, `DELETE /api/planned-items/:id` | Planzeile (Spannen `[min, max]`; Soll nur in Feldern der Übung; `load_kg` oder `load_pct` + `load_ref_exercise_id`); ändern, löschen |
 | `PUT /api/planned-sessions/:id/item-order` | Reihenfolge der Planzeilen (`item_ids`) |
@@ -199,7 +204,7 @@ Actions to create and approve pull requests“.
   aus dem Plan vor (Gewicht, obere Grenze je Soll; was der Plan offen lässt, folgt der alten Regel in `prefill.ts`),
   solange geplante Sätze übrig sind. Ein Satz auf einer Test-Planzeile erzeugt einen Testwert auf dem Server; der Store
   holt danach nur `planned` der Übung nach (`refreshTest`), damit „Neuer Testwert · Rückgängig“ stimmt.
-- **Plan bearbeiten (Client):** `ProgramView` zeigt ab 900 px Breite ein Raster (eine Spalte je Woche) mit Seitenleiste
+- **Plan bearbeiten (Client):** `ProgramView` zeigt ab 900 px Breite ein Raster (eine Spalte je Woche, nach Abschnitt in Cluster gruppiert, die umbrechen statt zu scrollen; `groupWeeksByPhase`; die Überschrift öffnet den Abschnitt im Editor) mit Seitenleiste
   (`PlanEditor`), darunter die Wochenliste. Auf dem Handy bearbeitet man Zeilen und Einheiten aus `PlannedView` über ein
   Sheet (`plan-edit` in `SheetState`, der Editor hält nur IDs). Jede Änderung antwortet mit dem ganzen Programm und ersetzt
   den Zustand; Formular ↔ API-Body und Spannen (`„5–8“`) stehen in `logic/plan-edit.ts` und `logic/range.ts`. Kein Offline-Entwurf für den Plan.

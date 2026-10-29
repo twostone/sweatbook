@@ -63,6 +63,7 @@
 
   <footer>
     <button type="button" class="btn big" onclick={() => navigate(paths.catalog())}><Icon name="list" />Katalog</button>
+    <button type="button" class="btn big" onclick={() => navigate(paths.programs())}><Icon name="list" />Pläne</button>
     <button type="button" class="btn big grow" class:primary={!open} disabled={busy} onclick={start}>
       <Icon name="plus" />Neue Session
     </button>

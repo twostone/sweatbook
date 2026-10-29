@@ -191,7 +191,7 @@ export function deleteProgram(db: Db, userId: string, id: string): void {
 const nextWeekNumber = (db: Db, programId: string): number =>
   ((db.prepare("SELECT MAX(number) AS n FROM program_week WHERE program_id = ?").get(programId) as { n: number | null }).n ?? 0) + 1;
 
-function insertPlannedSession(db: Db, weekId: string, label: string): string {
+export function insertPlannedSession(db: Db, weekId: string, label: string): string {
   const id = newId();
   db.prepare("INSERT INTO planned_session (id, week_id, position, label) VALUES (?, ?, ?, ?)").run(
     id,
@@ -328,7 +328,7 @@ function rowToInput(row: PlanItemRow): PlanItemInput {
 }
 
 // A line with an exercise may only have targets in fields the exercise has; a line without one is a note.
-function checkItem(db: Db, userId: string, input: PlanItemInput): void {
+export function checkItem(db: Db, userId: string, input: PlanItemInput): void {
   if (input.exercise_id === null) {
     const targets = [input.label, input.sets, input.reps, input.distance_m, input.duration_s, input.load_kg, input.load_pct, input.load_ref_exercise_id, input.test_kind];
     if (!input.note?.trim()) throw new InvalidError("a line without exercise needs a note");
@@ -352,7 +352,7 @@ function checkItem(db: Db, userId: string, input: PlanItemInput): void {
 }
 
 // itemId null = insert. Inside a transaction of the caller.
-function writeItem(db: Db, plannedSessionId: string, itemId: string | null, input: PlanItemInput): void {
+export function writeItem(db: Db, plannedSessionId: string, itemId: string | null, input: PlanItemInput): void {
   const [sMin, sMax] = input.sets ?? [null, null];
   const [rMin, rMax] = input.reps ?? [null, null];
   const [dMin, dMax] = input.distance_m ?? [null, null];

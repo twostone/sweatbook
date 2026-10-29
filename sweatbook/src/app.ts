@@ -24,6 +24,7 @@ import {
   updateWeek,
   type PlanItemInput,
 } from "./data/programs.ts";
+import { importProgram } from "./data/import.ts";
 import { createTest, deleteTest, listTests } from "./data/tests.ts";
 import { createExercise, deleteExercise, FIELDS, getExercise, listExercises, updateExercise } from "./data/exercises.ts";
 import { createSession, deleteSession, exerciseHistory, getSession, listSessions, updateSession } from "./data/sessions.ts";
@@ -145,6 +146,68 @@ const testBody = z.object({
   distance_m: z.number().int().min(0).max(MAX_DISTANCE_M).nullable().optional(),
   duration_s: z.number().int().min(0).max(86400).nullable().optional(),
   note: optionalText(500),
+});
+
+// The import file. Strict objects, so a misspelled target is an error and not silently ignored.
+const MAX_IMPORT_WEEKS = 200;
+const MAX_IMPORT_SESSIONS = 14;
+const MAX_IMPORT_ITEMS = 50;
+const MAX_IMPORT_ROWS = 200;
+const importRange = z.tuple([target, target]).refine(([min, max]) => min <= max, "min must not exceed max");
+const importKey = z.string().trim().min(1).max(40);
+const importLine = z.union([
+  z.strictObject({ text: z.string().trim().min(1).max(1000) }),
+  z.strictObject({
+    exercise: importKey,
+    label: z.string().trim().max(80).optional(),
+    sets: importRange.optional(),
+    reps: importRange.optional(),
+    distance_m: importRange.optional(),
+    duration_s: importRange.optional(),
+    max: z.boolean().optional(),
+    load: z
+      .union([
+        z.strictObject({ kg: z.number().min(0).max(1000) }),
+        z.strictObject({ percent: z.number().gt(0).max(MAX_LOAD_PCT), of: importKey }),
+      ])
+      .optional(),
+    test: z.enum(["one_rm", "best"]).optional(),
+    rest: z.string().trim().max(200).optional(),
+    note: z.string().trim().max(1000).optional(),
+  }),
+]);
+const importBody = z.object({
+  dry_run: z.boolean().optional(), // check and report, create nothing
+  file: z.strictObject({
+    program: z.strictObject({ name, start_date: day, start_week: z.number().int().min(1).max(MAX_IMPORT_WEEKS).optional() }),
+    exercises: z.array(z.strictObject({ key: importKey, name, fields })).max(MAX_IMPORT_ROWS),
+    tests: z
+      .array(
+        z.strictObject({
+          exercise: importKey,
+          tested_on: day,
+          kind: z.enum(["one_rm", "best"]),
+          weight_kg: z.number().min(0).max(1000).optional(),
+          reps: z.number().int().min(0).max(1000).optional(),
+          distance_m: z.number().int().min(0).max(MAX_DISTANCE_M).optional(),
+          duration_s: z.number().int().min(0).max(86400).optional(),
+          note: z.string().trim().max(500).optional(),
+        }),
+      )
+      .max(MAX_IMPORT_ROWS)
+      .optional(),
+    weeks: z
+      .array(
+        z.strictObject({
+          number: z.number().int().min(1).max(MAX_IMPORT_WEEKS),
+          phase: z.string().trim().max(100).optional(),
+          deload: z.boolean().optional(),
+          sessions: z.array(z.strictObject({ label, items: z.array(importLine).max(MAX_IMPORT_ITEMS) })).max(MAX_IMPORT_SESSIONS),
+        }),
+      )
+      .min(1)
+      .max(MAX_IMPORT_WEEKS),
+  }),
 });
 
 export type AppOptions = {
@@ -278,6 +341,10 @@ export function createApp(db: Db, opts: AppOptions = {}) {
 
   // Programs: changes answer with the whole program, like sessions do.
   app.get("/api/programs", (c) => c.json(listPrograms(db, c.get("user").id)));
+  app.post("/api/programs/import", zValidator("json", importBody), (c) => {
+    const { file, dry_run } = c.req.valid("json");
+    return c.json(importProgram(db, c.get("user").id, file, dry_run), dry_run ? 200 : 201);
+  });
   app.post("/api/programs", zValidator("json", programBody), (c) => c.json(createProgram(db, c.get("user").id, c.req.valid("json")), 201));
   app.get("/api/programs/:id", zValidator("param", idParam), (c) => c.json(getProgram(db, c.get("user").id, c.req.valid("param").id)));
   app.patch("/api/programs/:id", zValidator("param", idParam), zValidator("json", programPatch), (c) =>

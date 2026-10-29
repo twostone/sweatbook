@@ -133,20 +133,23 @@ function writeAliases(db: Db, userId: string, exerciseId: string, aliases: strin
   for (const alias of aliases) insert.run(exerciseId, userId, alias);
 }
 
-export function createExercise(db: Db, userId: string, input: ExerciseInput): Exercise {
+// Inside a transaction of the caller.
+export function insertExercise(db: Db, userId: string, input: ExerciseInput): string {
   const name = tidy(input.name);
   const aliases = cleanAliases(name, input.aliases ?? []);
   const fields = normalizeFields(input.fields);
   const id = newId();
-  transaction(db, () => {
-    assertFree(db, userId, [name, ...aliases], null);
-    db.prepare(
-      `INSERT INTO exercise (id, user_id, name, has_weight, has_reps, has_distance, has_duration, note, archived, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
-    ).run(id, userId, name, ...flags(fields), input.note ?? null, isoNow());
-    writeAliases(db, userId, id, aliases);
-  });
-  return getExercise(db, userId, id);
+  assertFree(db, userId, [name, ...aliases], null);
+  db.prepare(
+    `INSERT INTO exercise (id, user_id, name, has_weight, has_reps, has_distance, has_duration, note, archived, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
+  ).run(id, userId, name, ...flags(fields), input.note ?? null, isoNow());
+  writeAliases(db, userId, id, aliases);
+  return id;
+}
+
+export function createExercise(db: Db, userId: string, input: ExerciseInput): Exercise {
+  return getExercise(db, userId, transaction(db, () => insertExercise(db, userId, input)));
 }
 
 const flags = (fields: Field[]) => FIELDS.map((f) => (fields.includes(f) ? 1 : 0));

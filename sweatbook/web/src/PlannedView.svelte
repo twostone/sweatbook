@@ -4,7 +4,7 @@
   import Sheet from "./Sheet.svelte";
   import * as api from "./api";
   import { findPlanned, formatPlanLine, TEST_KIND_NAMES, weekDates } from "./logic/plan";
-  import { goUp, navigate, paths } from "./router.svelte";
+  import { goBack, navigate, paths, replace } from "./router.svelte";
   import { app, closeSheet, guard, openSheet, startPlanned } from "./store.svelte";
   import type { PlanTarget } from "./logic/plan-edit";
   import type { ProgramTree, SessionSummary } from "./types";
@@ -33,6 +33,9 @@
       program = await api.skipPlannedSession(plannedId, skipped);
     });
     busy = false;
+    // Skipping moves on to the next open session (replace: "back" must not return to the skipped one).
+    const next = skipped ? program?.next : null;
+    if (next && next.planned_session_id !== plannedId) replace(paths.plannedSession(programId, next.planned_session_id));
   }
 
   // Small corrections of the plan from the phone; the full editor is the plan grid on a wide screen.
@@ -47,7 +50,7 @@
 
 <div class="page">
   <header class="topbar">
-    <button type="button" class="icon-btn" aria-label="Zum Plan" onclick={() => goUp(paths.program(programId))}><Icon name="back" /></button>
+    <button type="button" class="icon-btn" aria-label="Zurück" onclick={() => goBack(paths.program(programId))}><Icon name="back" /></button>
     <span class="label">{program?.name ?? "Plan"}</span>
   </header>
   {#if program && found}

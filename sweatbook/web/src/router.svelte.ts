@@ -34,6 +34,16 @@ export function goUp(hash: string) {
   history.go(-steps);
 }
 
+// Back to wherever this page was opened from (a page with several entrances); after a reload there is no trail: replace.
+export function goBack(fallback: string) {
+  if (trail.length === 0) {
+    replace(fallback);
+    return;
+  }
+  trail.pop();
+  history.go(-1);
+}
+
 window.addEventListener("popstate", () => {
   if (trail.at(-1) === location.hash) trail.pop(); // the user went back up on their own
 });

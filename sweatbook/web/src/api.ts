@@ -145,6 +145,8 @@ export const addWeek = (programId: string, week: { phase?: string | null; deload
   request<ProgramTree>("POST", `api/programs/${enc(programId)}/weeks`, week);
 export const updateWeek = (id: string, patch: { phase?: string | null; deload?: boolean }) =>
   request<ProgramTree>("PATCH", `api/weeks/${enc(id)}`, patch);
+export const updatePhase = (id: string, patch: { name?: string; note?: string | null }) => request<ProgramTree>("PATCH", `api/phases/${enc(id)}`, patch);
+export const deletePhase = (id: string) => request<ProgramTree>("DELETE", `api/phases/${enc(id)}`);
 export const deleteWeek = (id: string) => request<ProgramTree>("DELETE", `api/weeks/${enc(id)}`);
 export const addPlannedSession = (weekId: string, label: string) => request<ProgramTree>("POST", `api/weeks/${enc(weekId)}/sessions`, { label });
 export const renamePlannedSession = (id: string, label: string) => request<ProgramTree>("PATCH", `api/planned-sessions/${enc(id)}`, { label });

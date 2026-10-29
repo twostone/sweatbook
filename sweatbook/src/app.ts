@@ -10,6 +10,7 @@ import {
   addPlannedSession,
   addWeek,
   createProgram,
+  deletePhase,
   deletePlanItem,
   deletePlannedSession,
   deleteProgram,
@@ -22,6 +23,7 @@ import {
   startPlannedSession,
   updatePlanItem,
   updatePlannedSession,
+  updatePhase,
   updateProgram,
   updateWeek,
   type PlanItemInput,
@@ -137,6 +139,7 @@ const programPatch = z.object({ name: name.optional(), shared: z.boolean().optio
 const phase = optionalText(100);
 const weekBody = z.object({ phase, deload: z.boolean().optional(), copy_of: id.optional() });
 const weekPatch = z.object({ phase, deload: z.boolean().optional() });
+const phasePatch = z.object({ name: z.string().trim().min(1).max(100).optional(), note: optionalText(1000) });
 const label = z.string().trim().min(1).max(20);
 const plannedSessionPatch = z.object({ label: label.optional(), skipped: z.boolean().optional(), skip_note: optionalText(100) });
 const MAX_PLAN_ITEMS = 50;
@@ -367,6 +370,10 @@ export function createApp(db: Db, opts: AppOptions = {}) {
   app.post("/api/programs/:id/weeks", zValidator("param", idParam), zValidator("json", weekBody), (c) =>
     c.json(addWeek(db, c.get("user").id, c.req.valid("param").id, c.req.valid("json")), 201),
   );
+  app.patch("/api/phases/:id", zValidator("param", idParam), zValidator("json", phasePatch), (c) =>
+    c.json(updatePhase(db, c.get("user").id, c.req.valid("param").id, c.req.valid("json"))),
+  );
+  app.delete("/api/phases/:id", zValidator("param", idParam), (c) => c.json(deletePhase(db, c.get("user").id, c.req.valid("param").id)));
   app.patch("/api/weeks/:id", zValidator("param", idParam), zValidator("json", weekPatch), (c) =>
     c.json(updateWeek(db, c.get("user").id, c.req.valid("param").id, c.req.valid("json"))),
   );

@@ -127,8 +127,9 @@ export function planOfSession(db: Db, plannedSessionId: string | null): SessionP
   if (plannedSessionId === null) return null;
   const row = db
     .prepare(
-      `SELECT ps.id, ps.label, w.number AS week, w.phase, p.id AS program_id, p.name AS program_name
-       FROM planned_session ps JOIN program_week w ON w.id = ps.week_id JOIN program p ON p.id = w.program_id WHERE ps.id = ?`,
+      `SELECT ps.id, ps.label, w.number AS week, ph.name AS phase, p.id AS program_id, p.name AS program_name
+       FROM planned_session ps JOIN program_week w ON w.id = ps.week_id JOIN program p ON p.id = w.program_id
+       LEFT JOIN program_phase ph ON ph.id = w.phase_id WHERE ps.id = ?`,
     )
     .get(plannedSessionId) as { id: string; label: string; week: number; phase: string | null; program_id: string; program_name: string } | undefined;
   if (!row) return null;

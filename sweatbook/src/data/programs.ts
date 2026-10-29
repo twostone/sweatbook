@@ -1,12 +1,12 @@
 import { isoNow, transaction, type Db } from "../db.ts";
-import { ForbiddenError, InvalidError, newId, nextPosition, NotFoundError, toBool } from "./common.ts";
+import { ConflictError, ForbiddenError, InvalidError, nameKey, newId, nextPosition, NotFoundError, tidy, toBool } from "./common.ts";
 import { insertBlock } from "./blocks.ts";
 import { assertUsable, getExercise } from "./exercises.ts";
 import { ITEM_COLUMNS, PlanContext, planItem, type PlanItem, type PlanItemRow, type Range } from "./plan.ts";
 import { getSession, insertSession, type SessionTree } from "./sessions.ts";
 import { TEST_COLUMNS, type ExerciseTest, type TestKind } from "./tests.ts";
 
-// A program is a multi-week plan: weeks (with a phase name and a deload flag) hold planned sessions ("A", "B"), which
+// A program is a multi-week plan: weeks (in a phase, with a deload flag) hold planned sessions ("A", "B"), which
 // hold plan lines. Done is not stored: a planned session is done when a session with sets hangs on it, or skipped.
 export type PlannedSessionState = "done" | "skipped" | "open";
 
@@ -19,7 +19,9 @@ export type PlannedSessionTree = {
   session_id: string | null; // the newest session started from it
   items: PlanItem[];
 };
-export type WeekTree = { id: string; number: number; phase: string | null; deload: boolean; sessions: PlannedSessionTree[] };
+// A phase (mesocycle) groups neighbouring weeks; its weeks name it by id, `phase` on a week is its name.
+export type PhaseTree = { id: string; name: string; note: string | null };
+export type WeekTree = { id: string; number: number; phase_id: string | null; phase: string | null; deload: boolean; sessions: PlannedSessionTree[] };
 export type NextWorkout = { planned_session_id: string; week: number; phase: string | null; label: string };
 
 export type ProgramSummary = {
@@ -35,7 +37,7 @@ export type ProgramSummary = {
   total: number;
   next: NextWorkout | null; // the first open planned session in order
 };
-export type ProgramTree = ProgramSummary & { weeks: WeekTree[]; tests: (ExerciseTest & { exercise_name: string })[] };
+export type ProgramTree = ProgramSummary & { phases: PhaseTree[]; weeks: WeekTree[]; tests: (ExerciseTest & { exercise_name: string })[] };
 
 type ProgramRow = {
   id: string;
@@ -70,8 +72,9 @@ function ownedProgramRow(db: Db, userId: string, id: string): ProgramRow {
 }
 
 // The program a week / planned session / plan line belongs to; foreign or unknown ids are the same 404.
-function ownerOf(db: Db, userId: string, what: "week" | "planned session" | "plan line", id: string): string {
+function ownerOf(db: Db, userId: string, what: "phase" | "week" | "planned session" | "plan line", id: string): string {
   const sql = {
+    phase: "SELECT p.id FROM program_phase ph JOIN program p ON p.id = ph.program_id WHERE ph.id = ?",
     week: "SELECT p.id FROM program_week w JOIN program p ON p.id = w.program_id WHERE w.id = ?",
     "planned session": "SELECT p.id FROM planned_session ps JOIN program_week w ON w.id = ps.week_id JOIN program p ON p.id = w.program_id WHERE ps.id = ?",
     "plan line": `SELECT p.id FROM planned_item pi JOIN planned_session ps ON ps.id = pi.planned_session_id
@@ -102,10 +105,10 @@ const WITH_SETS = `EXISTS (SELECT 1 FROM block b JOIN block_exercise be ON be.bl
 function sessionRows(db: Db, userId: string, programId: string): SessionRow[] {
   return db
     .prepare(
-      `SELECT ps.id, ps.week_id, w.number AS week, w.phase, ps.position, ps.label, k.skipped_at, k.skip_note,
+      `SELECT ps.id, ps.week_id, w.number AS week, ph.name AS phase, ps.position, ps.label, k.skipped_at, k.skip_note,
          (SELECT s.id FROM session s WHERE s.planned_session_id = ps.id AND s.user_id = ? ORDER BY s.started_at DESC LIMIT 1) AS session_id,
          (SELECT s.started_at FROM session s WHERE s.planned_session_id = ps.id AND s.user_id = ? AND ${WITH_SETS} ORDER BY s.started_at LIMIT 1) AS done_at
-       FROM planned_session ps JOIN program_week w ON w.id = ps.week_id
+       FROM planned_session ps JOIN program_week w ON w.id = ps.week_id LEFT JOIN program_phase ph ON ph.id = w.phase_id
          LEFT JOIN planned_session_skip k ON k.planned_session_id = ps.id AND k.user_id = ?
        WHERE w.program_id = ? ORDER BY w.number, ps.position`,
     )
@@ -146,15 +149,18 @@ export function getProgram(db: Db, userId: string, id: string): ProgramTree {
   const rows = sessionRows(db, userId, id);
   const ctx = new PlanContext(db, userId);
   const itemsOf = db.prepare(`SELECT ${ITEM_COLUMNS} FROM planned_item WHERE planned_session_id = ? ORDER BY position`);
-  const weeks = (db.prepare("SELECT id, number, phase, deload FROM program_week WHERE program_id = ? ORDER BY number").all(id) as {
-    id: string;
-    number: number;
-    phase: string | null;
-    deload: number;
-  }[]).map(
+  const weeks = (
+    db
+      .prepare(
+        `SELECT w.id, w.number, w.phase_id, ph.name AS phase, w.deload FROM program_week w
+         LEFT JOIN program_phase ph ON ph.id = w.phase_id WHERE w.program_id = ? ORDER BY w.number`,
+      )
+      .all(id) as { id: string; number: number; phase_id: string | null; phase: string | null; deload: number }[]
+  ).map(
     (w): WeekTree => ({
       id: w.id,
       number: w.number,
+      phase_id: w.phase_id,
       phase: w.phase,
       deload: toBool(w.deload),
       sessions: rows
@@ -182,7 +188,13 @@ export function getProgram(db: Db, userId: string, id: string): ProgramTree {
        ORDER BY t.tested_on, e.name`,
     )
     .all(userId, id, id) as (ExerciseTest & { exercise_name: string })[];
-  return { ...summarize(userId, program, rows), weeks, tests };
+  const phases = db
+    .prepare(
+      `SELECT id, name, note FROM program_phase ph WHERE program_id = ?
+       ORDER BY (SELECT MIN(number) FROM program_week w WHERE w.phase_id = ph.id), name`,
+    )
+    .all(id) as PhaseTree[];
+  return { ...summarize(userId, program, rows), phases, weeks, tests };
 }
 
 export type ProgramInput = { name: string; start_date: string };
@@ -243,8 +255,6 @@ export function deleteProgram(db: Db, userId: string, id: string): void {
   db.prepare("DELETE FROM program WHERE id = ?").run(id);
 }
 
-// Weeks
-
 const nextWeekNumber = (db: Db, programId: string): number =>
   ((db.prepare("SELECT MAX(number) AS n FROM program_week WHERE program_id = ?").get(programId) as { n: number | null }).n ?? 0) + 1;
 
@@ -259,22 +269,65 @@ export function insertPlannedSession(db: Db, weekId: string, label: string): str
   return id;
 }
 
+// Phases
+
+// The phase of the program with this name (compared like exercise names), created when there is none. null for no phase.
+export function resolvePhase(db: Db, programId: string, name: string | null): string | null {
+  const text = name === null ? "" : tidy(name);
+  if (!text) return null;
+  const phases = db.prepare("SELECT id, name FROM program_phase WHERE program_id = ?").all(programId) as { id: string; name: string }[];
+  const found = phases.find((p) => nameKey(p.name) === nameKey(text));
+  if (found) return found.id;
+  const id = newId();
+  db.prepare("INSERT INTO program_phase (id, program_id, name) VALUES (?, ?, ?)").run(id, programId, text);
+  return id;
+}
+
+// A phase without weeks has nothing to show, so it goes with its last week.
+function pruneEmptyPhases(db: Db, programId: string): void {
+  db.prepare("DELETE FROM program_phase WHERE program_id = ? AND NOT EXISTS (SELECT 1 FROM program_week w WHERE w.phase_id = program_phase.id)").run(programId);
+}
+
+// Renaming reaches every week of the phase. A name another phase of the program has is a conflict.
+export function updatePhase(db: Db, userId: string, phaseId: string, patch: { name?: string; note?: string | null }): ProgramTree {
+  const programId = ownerOf(db, userId, "phase", phaseId);
+  transaction(db, () => {
+    const current = db.prepare("SELECT name, note FROM program_phase WHERE id = ?").get(phaseId) as { name: string; note: string | null };
+    const name = patch.name !== undefined ? tidy(patch.name) : current.name;
+    if (!name) throw new InvalidError("name must not be empty");
+    const others = db.prepare("SELECT id, name FROM program_phase WHERE program_id = ? AND id <> ?").all(programId, phaseId) as { id: string; name: string }[];
+    const clash = others.find((p) => nameKey(p.name) === nameKey(name));
+    if (clash) throw new ConflictError("name taken", { name, taken_by: clash.id });
+    db.prepare("UPDATE program_phase SET name = ?, note = ? WHERE id = ?").run(name, patch.note !== undefined ? patch.note : current.note, phaseId);
+  });
+  return getProgram(db, userId, programId);
+}
+
+// The weeks stay, without a phase.
+export function deletePhase(db: Db, userId: string, phaseId: string): ProgramTree {
+  const programId = ownerOf(db, userId, "phase", phaseId);
+  db.prepare("DELETE FROM program_phase WHERE id = ?").run(phaseId);
+  return getProgram(db, userId, programId);
+}
+
+// Weeks
+
 // The new week gets the next number. A copy takes phase, deload flag, planned sessions and lines of another week of the
 // same program ("Woche kopieren": most weeks differ only in percent or sets).
 export function addWeek(db: Db, userId: string, programId: string, opts: { phase?: string | null; deload?: boolean; copy_of?: string }): ProgramTree {
   programRow(db, userId, programId);
   transaction(db, () => {
-    let source: { id: string; phase: string | null; deload: number } | undefined;
+    let source: { id: string; phase_id: string | null; deload: number } | undefined;
     if (opts.copy_of) {
-      source = db.prepare("SELECT id, phase, deload FROM program_week WHERE id = ? AND program_id = ?").get(opts.copy_of, programId) as typeof source;
+      source = db.prepare("SELECT id, phase_id, deload FROM program_week WHERE id = ? AND program_id = ?").get(opts.copy_of, programId) as typeof source;
       if (!source) throw new NotFoundError("week");
     }
     const weekId = newId();
-    db.prepare("INSERT INTO program_week (id, program_id, number, phase, deload) VALUES (?, ?, ?, ?, ?)").run(
+    db.prepare("INSERT INTO program_week (id, program_id, number, phase_id, deload) VALUES (?, ?, ?, ?, ?)").run(
       weekId,
       programId,
       nextWeekNumber(db, programId),
-      opts.phase !== undefined ? opts.phase : (source?.phase ?? null),
+      opts.phase !== undefined ? resolvePhase(db, programId, opts.phase) : (source?.phase_id ?? null),
       (opts.deload ?? (source ? toBool(source.deload) : false)) ? 1 : 0,
     );
     if (source) copySessions(db, source.id, weekId);
@@ -293,18 +346,24 @@ function copySessions(db: Db, fromWeekId: string, toWeekId: string): void {
 
 export function updateWeek(db: Db, userId: string, weekId: string, patch: { phase?: string | null; deload?: boolean }): ProgramTree {
   const programId = ownerOf(db, userId, "week", weekId);
-  const current = db.prepare("SELECT phase, deload FROM program_week WHERE id = ?").get(weekId) as { phase: string | null; deload: number };
-  db.prepare("UPDATE program_week SET phase = ?, deload = ? WHERE id = ?").run(
-    patch.phase !== undefined ? patch.phase : current.phase,
-    (patch.deload ?? toBool(current.deload)) ? 1 : 0,
-    weekId,
-  );
+  transaction(db, () => {
+    const current = db.prepare("SELECT phase_id, deload FROM program_week WHERE id = ?").get(weekId) as { phase_id: string | null; deload: number };
+    db.prepare("UPDATE program_week SET phase_id = ?, deload = ? WHERE id = ?").run(
+      patch.phase !== undefined ? resolvePhase(db, programId, patch.phase) : current.phase_id,
+      (patch.deload ?? toBool(current.deload)) ? 1 : 0,
+      weekId,
+    );
+    pruneEmptyPhases(db, programId);
+  });
   return getProgram(db, userId, programId);
 }
 
 export function deleteWeek(db: Db, userId: string, weekId: string): ProgramTree {
   const programId = ownerOf(db, userId, "week", weekId);
-  db.prepare("DELETE FROM program_week WHERE id = ?").run(weekId);
+  transaction(db, () => {
+    db.prepare("DELETE FROM program_week WHERE id = ?").run(weekId);
+    pruneEmptyPhases(db, programId);
+  });
   return getProgram(db, userId, programId);
 }
 

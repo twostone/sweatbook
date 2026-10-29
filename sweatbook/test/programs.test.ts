@@ -185,6 +185,45 @@ test("weeks: a copy takes phase, sessions and lines but starts open; numbers cou
   assert.equal((await call("DELETE", `/api/weeks/${copy.id}`)).json.weeks.length, 1);
 });
 
+test("phases: weeks of one name share a phase; rename, note and dissolve work on the phase", async () => {
+  const { call, as } = setup();
+  let program = (await call("POST", "/api/programs", { name: "Plan", start_date: "2026-08-31" })).json;
+  for (const phase of ["Aufbau", "aufbau", "Test", null]) program = (await call("POST", `/api/programs/${program.id}/weeks`, phase ? { phase } : {})).json;
+  assert.deepEqual(program.phases.map((p: any) => p.name), ["Aufbau", "Test"]);
+  const [w1, w2, w3, w4] = program.weeks;
+  assert.deepEqual([w1.phase_id === w2.phase_id, w1.phase_id === w3.phase_id, w4.phase_id], [true, false, null]);
+
+  const [aufbau, test] = program.phases;
+  program = (await call("PATCH", `/api/phases/${aufbau.id}`, { name: "Grundlagen", note: "ruhig starten" })).json;
+  assert.deepEqual(program.weeks.map((w: any) => w.phase), ["Grundlagen", "Grundlagen", "Test", null]);
+  assert.equal(program.phases[0].note, "ruhig starten");
+  const taken = await call("PATCH", `/api/phases/${test.id}`, { name: " grundlagen " });
+  assert.deepEqual([taken.status, taken.json.taken_by], [409, aufbau.id]);
+  assert.equal((await call("PATCH", `/api/phases/${aufbau.id}`, { note: "" })).json.phases[0].note, null);
+
+  const moved = (await call("PATCH", `/api/weeks/${w3.id}`, { phase: "GRUNDLAGEN" })).json;
+  assert.deepEqual([moved.phases.map((p: any) => p.name), moved.weeks[2].phase_id === aufbau.id], [["Grundlagen"], true]);
+
+  const stranger = as("ha-user-2");
+  assert.equal((await stranger("PATCH", `/api/phases/${aufbau.id}`, { name: "x" })).status, 404);
+  assert.equal((await stranger("DELETE", `/api/phases/${aufbau.id}`)).status, 404);
+
+  const dissolved = (await call("DELETE", `/api/phases/${aufbau.id}`)).json;
+  assert.deepEqual([dissolved.phases, dissolved.weeks.map((w: any) => w.phase)], [[], [null, null, null, null]]);
+});
+
+test("phases: a copied week stays in the phase; the last week of a phase takes it along", async () => {
+  const { call } = setup();
+  let program = (await call("POST", "/api/programs", { name: "Plan", start_date: "2026-08-31" })).json;
+  program = (await call("POST", `/api/programs/${program.id}/weeks`, { phase: "Aufbau" })).json;
+  program = (await call("POST", `/api/programs/${program.id}/weeks`, { copy_of: program.weeks[0].id })).json;
+  assert.deepEqual([program.phases.length, program.weeks[1].phase_id === program.weeks[0].phase_id], [1, true]);
+  program = (await call("DELETE", `/api/weeks/${program.weeks[0].id}`)).json;
+  assert.equal(program.phases.length, 1);
+  program = (await call("PATCH", `/api/weeks/${program.weeks[0].id}`, { phase: null })).json;
+  assert.deepEqual([program.phases, program.weeks[0].phase_id], [[], null]);
+});
+
 test("programs: list with progress, archive, delete keeps the sessions; foreign ones are 404", async () => {
   const { call, as } = setup();
   const { program, a } = await plan(call);

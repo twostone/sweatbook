@@ -111,7 +111,8 @@ export type PlannedSession = {
   session_id: string | null; // the newest session started from it
   items: PlanItem[];
 };
-export type PlanWeek = { id: string; number: number; phase: string | null; deload: boolean; sessions: PlannedSession[] };
+export type PlanPhase = { id: string; name: string; note: string | null };
+export type PlanWeek = { id: string; number: number; phase_id: string | null; phase: string | null; deload: boolean; sessions: PlannedSession[] };
 export type NextWorkout = { planned_session_id: string; week: number; phase: string | null; label: string };
 
 export type ProgramSummary = {
@@ -127,7 +128,7 @@ export type ProgramSummary = {
   total: number;
   next: NextWorkout | null;
 };
-export type ProgramTree = ProgramSummary & { weeks: PlanWeek[]; tests: (ExerciseTest & { exercise_name: string })[] };
+export type ProgramTree = ProgramSummary & { phases: PlanPhase[]; weeks: PlanWeek[]; tests: (ExerciseTest & { exercise_name: string })[] };
 export type ImportResult = { program: ProgramTree; new_exercises: string[] };
 
 // What a session knows of its plan: where it comes from, and per exercise the target.

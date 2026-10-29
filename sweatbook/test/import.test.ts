@@ -25,6 +25,14 @@ test("import: the example file becomes a whole program; earlier weeks count as d
   assert.deepEqual(p.tests.map((t: any) => [t.exercise_name, t.kind]).sort(), [["Bankziehen", "best"], ["Bankziehen", "one_rm"], ["Dead Hang", "best"]]);
 });
 
+test("import: weeks with the same phase name share one phase", async () => {
+  const { call } = setup();
+  const p = (await call("POST", "/api/programs/import", { file: example() })).json.program;
+  assert.deepEqual(p.phases.map((x: any) => x.name), ["Phase 1 – Aufbau", "Phase 2 – Test"]);
+  assert.equal(p.weeks[0].phase_id, p.weeks[1].phase_id);
+  assert.notEqual(p.weeks[1].phase_id, p.weeks[2].phase_id);
+});
+
 test("import: existing exercises are found by name or alias, nothing is duplicated", async () => {
   const { call } = setup();
   const own = (await call("POST", "/api/exercises", { name: "Bench Pull", fields: ["weight", "reps"], aliases: ["bankziehen"] })).json;

@@ -5,7 +5,7 @@ Anleitung für Coding-Agents und Mitwirkende. Kurz halten, bei Änderungen an Ar
 ## Projekt
 
 Trainings-Tracker als Home-Assistant-App (Ingress). Phase 1: Krafttraining loggen, live im Gym und nachträglich, mit
-selbst gepflegtem Übungskatalog. Phase 2 (im Aufbau): Programme mit Soll-Werten, Testwerte, Training aus dem Plan. Das Datenmodell ist schon auf Planung, CrossFit und Ausdauer ausgelegt, die
+selbst gepflegtem Übungskatalog. Phase 2: Programme mit Soll-Werten, Testwerte, Training aus dem Plan. Das Datenmodell ist schon auf Planung, CrossFit und Ausdauer ausgelegt, die
 Oberfläche noch nicht. Grundsatz: **KISS und YAGNI** mit Augenmaß auf spätere Phasen. Nichts bauen, was nicht
 ausdrücklich gebraucht wird. Aufbau, Pipeline und viele Regeln sind von [twostone/meal-planner](https://github.com/twostone/meal-planner) übernommen.
 
@@ -209,12 +209,17 @@ Actions to create and approve pull requests“.
 
 - Phase 1 ist gebaut: Backend und Oberfläche (Start mit Nachtragen, Verlauf, Session-Übersicht, Übung, Supersatz, Sheet
   „Übung hinzufügen“, Übungskatalog mit Anlegen und Detail).
+- Phase 2 ist gebaut: Satzfelder pro Übung, Programme mit Wochen, Einheiten und Planzeilen, Testwerte, Import aus JSON,
+  Training aus dem Plan (Start-Karten, geplante Einheit, Soll und Vorbelegung, Testwert aus dem Testsatz) und der Editor.
+  Die Übungsseite hat bewusst eine nachgefüllte „nächster Satz“-Zeile statt mehrerer vorbelegter. Konzept und Entscheidungen
+  liegen außerhalb des Repos.
 - Nachgetragene Sessions legt der Start mit `ended_at` = Beginn an (der einzige bekannte Zeitpunkt).
 - Der Start erkennt die offene Session unter den neuesten (`START_SESSIONS` in `store.svelte.ts`). Eine ältere offene
   (nur per API wiedergeöffnet) zeigt er nicht. Mockups und Konzept liegen
   außerhalb des Repos.
 - Am echten Home Assistant geprüft (24.10.2026): Ingress-Header `X-Remote-User-*`, Start der App, `prefers-color-scheme`
-  kommt in der Companion-App an (kein eigener Theme-Umschalter nötig). Noch offen: Android-Zahlentastatur bei kg und Zeit.
+  kommt in der Companion-App an (kein eigener Theme-Umschalter nötig). Noch offen am echten Gerät: Android-Zahlentastatur bei kg und Zeit, Dateiauswahl für den Plan-Import in der
+  Companion-App, vier Satzfelder in einer Zeile.
 
 ## Git und Pull Requests
 

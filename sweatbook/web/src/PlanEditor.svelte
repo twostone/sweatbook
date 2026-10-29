@@ -102,19 +102,39 @@
 <div class="editor">
   {#if target.kind === "program"}
     <h2 class="label">Programm</h2>
-    <label>Name<input class="field" bind:value={name} maxlength="100" /></label>
+    <label>Name<input class="field" bind:value={name} maxlength="100" disabled={!program.owned} /></label>
     <label>Start (Montag von Woche 1)<input class="field" type="date" bind:value={startDate} /></label>
-    <button type="button" class="btn strong" disabled={busy || !name.trim() || !startDate} onclick={() => run(() => api.updateProgram(program.id, { name: name.trim(), start_date: startDate }))}>Speichern</button>
+    <button
+      type="button"
+      class="btn strong"
+      disabled={busy || !name.trim() || !startDate}
+      onclick={() => run(() => api.updateProgram(program.id, { ...(program.owned ? { name: name.trim() } : {}), start_date: startDate }))}
+    >Speichern</button>
     <button type="button" class="btn" disabled={busy} onclick={() => run(() => api.addWeek(program.id, {}))}><Icon name="plus" />Woche anhängen</button>
     <button type="button" class="btn" disabled={busy} onclick={() => run(() => api.updateProgram(program.id, { archived: !program.archived }))}>
       {program.archived ? "Wiederherstellen" : "Archivieren"}
     </button>
-    {@render danger("Programm löschen", async () => {
-      busy = true;
-      const ok = await guard(() => api.deleteProgram(program.id));
-      busy = false;
-      if (ok) goUp(paths.programs());
-    })}
+    {#if program.owned}
+      <label class="check">
+        <input type="checkbox" checked={program.shared} disabled={busy} onchange={() => run(() => api.updateProgram(program.id, { shared: !program.shared }))} />
+        Mit allen teilen
+      </label>
+      <p class="muted">Alle Nutzer können den Plan übernehmen und bearbeiten. Fortschritt, Start und Testwerte bleiben bei jedem eigen.</p>
+      {@render danger("Programm löschen", async () => {
+        busy = true;
+        const ok = await guard(() => api.deleteProgram(program.id));
+        busy = false;
+        if (ok) goUp(paths.programs());
+      })}
+    {:else}
+      <p class="muted">Geteilt von {program.owner_name ?? "einem anderen Nutzer"}.</p>
+      {@render danger("Plan verlassen", async () => {
+        busy = true;
+        const ok = await guard(() => api.leaveProgram(program.id));
+        busy = false;
+        if (ok) goUp(paths.programs());
+      })}
+    {/if}
   {:else if target.kind === "week" && found.week}
     {@const week = found.week}
     <h2 class="label">Woche {week.number} · {weekDates(program.start_date, week.number)}</h2>

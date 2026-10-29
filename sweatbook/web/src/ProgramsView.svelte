@@ -34,8 +34,19 @@
     }).then(() => (loaded = true));
   });
 
-  const active = $derived(programs.filter((p) => !p.archived));
-  const archived = $derived(programs.filter((p) => p.archived));
+  const active = $derived(programs.filter((p) => p.joined && !p.archived));
+  const archived = $derived(programs.filter((p) => p.joined && p.archived));
+  const offered = $derived(programs.filter((p) => !p.joined));
+
+  // Taking up a shared program: it opens with a start of one's own (the coming Monday by default).
+  async function join(p: ProgramSummary) {
+    busy = true;
+    await guard(async () => {
+      await api.joinProgram(p.id, nextMonday());
+      navigate(paths.program(p.id));
+    });
+    busy = false;
+  }
 </script>
 
 {#snippet card(p: ProgramSummary)}
@@ -48,6 +59,7 @@
     }}
   >
     <span class="name">{p.name}</span>
+    {#if p.shared}<span class="muted">{p.owned ? "Mit allen geteilt" : `Geteilt von ${p.owner_name ?? "einem anderen Nutzer"}`}</span>{/if}
     <span class="muted">{p.done} von {p.total} Einheiten</span>
     {#if p.next}
       <span class="num-text">Nächstes: Woche {p.next.week} · {p.next.label}</span>
@@ -79,6 +91,16 @@
     {:else}
       {#if loaded}<p class="muted none">Noch kein Plan. Importiere eine Plandatei.</p>{/if}
     {/each}
+    {#if offered.length}
+      <h2 class="label section">Geteilt</h2>
+      {#each offered as p (p.id)}
+        <div class="card program">
+          <span class="name">{p.name}</span>
+          <span class="muted">Von {p.owner_name ?? "einem anderen Nutzer"} · {p.total} Einheiten</span>
+          <button type="button" class="btn strong" disabled={busy} onclick={() => join(p)}>Hinzufügen</button>
+        </div>
+      {/each}
+    {/if}
     {#if archived.length}
       <h2 class="label section">Archiviert</h2>
       {#each archived as p (p.id)}

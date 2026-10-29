@@ -1,4 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
+import { nameKey } from "./data/common.ts";
 
 // All database access goes through this module and src/data/: node:sqlite is still young, and keeping it in one place
 // keeps a later switch (another driver, or Postgres when the app moves to a real server) small.
@@ -7,7 +8,9 @@ import { DatabaseSync } from "node:sqlite";
 // booleans as INTEGER 0/1, no COLLATE NOCASE, never query inside JSON. The one deliberate exception is STRICT.
 
 // One entry per schema version, applied in order and recorded in schema_migrations. Only ever append, never edit.
-export const MIGRATIONS: readonly string[] = [
+// A migration is SQL, or a function when it needs JS (v5 compares names the way the app does).
+export type Migration = string | ((db: Db) => void);
+export const MIGRATIONS: readonly Migration[] = [
   // v1: Phase 1, logging strength training (see "Datenmodell" in AGENTS.md).
   `
   CREATE TABLE app_user (
@@ -171,7 +174,115 @@ export const MIGRATIONS: readonly string[] = [
   ALTER TABLE block_exercise ADD COLUMN planned_item_id TEXT REFERENCES planned_item(id) ON DELETE SET NULL;
   CREATE INDEX session_planned ON session(planned_session_id);
   `,
+  // v5: shared programs and one exercise catalog for everybody.
+  (db) => {
+    db.exec(V5_BEFORE_MERGE);
+    mergeCatalogs(db);
+    db.exec(V5_AFTER_MERGE);
+  },
 ];
+
+// exercise_test gets its owner (it was the owner of the exercise); nullable because SQLite cannot add a NOT NULL column
+// with a reference, the app always sets it.
+const V5_BEFORE_MERGE = `
+  ALTER TABLE exercise_test ADD COLUMN user_id TEXT REFERENCES app_user(id) ON DELETE CASCADE;
+  UPDATE exercise_test SET user_id = (SELECT e.user_id FROM exercise e WHERE e.id = exercise_test.exercise_id);
+  DROP INDEX exercise_name;
+  DROP INDEX exercise_alias_name;
+`;
+
+// exercise.user_id and exercise_alias.user_id stay as "created by": the catalog is shared, no query filters on them.
+const V5_AFTER_MERGE = `
+  CREATE UNIQUE INDEX exercise_name ON exercise(lower(name));
+  CREATE UNIQUE INDEX exercise_alias_name ON exercise_alias(lower(alias));
+  CREATE INDEX exercise_test_user ON exercise_test(user_id, exercise_id);
+
+  ALTER TABLE program ADD COLUMN shared INTEGER NOT NULL DEFAULT 0 CHECK (shared IN (0, 1));
+
+  -- start date and archive flag are per user; program.start_date / archived are no longer read
+  CREATE TABLE program_member (
+    program_id TEXT NOT NULL REFERENCES program(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL REFERENCES app_user(id) ON DELETE CASCADE,
+    start_date TEXT NOT NULL,
+    archived INTEGER NOT NULL DEFAULT 0 CHECK (archived IN (0, 1)),
+    joined_at TEXT NOT NULL,
+    PRIMARY KEY (program_id, user_id)
+  ) STRICT;
+  CREATE INDEX program_member_user ON program_member(user_id);
+  INSERT INTO program_member (program_id, user_id, start_date, archived, joined_at)
+    SELECT id, user_id, start_date, archived, created_at FROM program;
+
+  -- skipped is per user too; planned_session.skipped_at / skip_note are no longer read
+  CREATE TABLE planned_session_skip (
+    planned_session_id TEXT NOT NULL REFERENCES planned_session(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL REFERENCES app_user(id) ON DELETE CASCADE,
+    skipped_at TEXT NOT NULL,
+    skip_note TEXT,
+    PRIMARY KEY (planned_session_id, user_id)
+  ) STRICT;
+  INSERT INTO planned_session_skip (planned_session_id, user_id, skipped_at, skip_note)
+    SELECT ps.id, p.user_id, ps.skipped_at, ps.skip_note
+    FROM planned_session ps JOIN program_week w ON w.id = ps.week_id JOIN program p ON p.id = w.program_id
+    WHERE ps.skipped_at IS NOT NULL;
+`;
+
+type CatalogRow = { id: string; name: string; note: string | null; archived: number; created_at: string; has_weight: number; has_reps: number; has_distance: number; has_duration: number; user_id: string };
+
+// Exercises of different users that share a name or alias (case ignored) become one: the oldest stays, fields are
+// united, the others' names become aliases, and everything pointing at them is moved over.
+function mergeCatalogs(db: Db): void {
+  const exercises = db.prepare("SELECT * FROM exercise ORDER BY created_at, id").all() as CatalogRow[];
+  const aliases = db.prepare("SELECT exercise_id, alias FROM exercise_alias").all() as { exercise_id: string; alias: string }[];
+  const namesOf = new Map<string, string[]>();
+  for (const e of exercises) namesOf.set(e.id, [e.name]);
+  for (const a of aliases) namesOf.get(a.exercise_id)?.push(a.alias);
+
+  // group by shared name keys (union-find over the exercises)
+  const parent = new Map<string, string>(exercises.map((e) => [e.id, e.id]));
+  const root = (id: string): string => (parent.get(id) === id ? id : root(parent.get(id)!));
+  const owner = new Map<string, string>();
+  for (const e of exercises) {
+    for (const n of namesOf.get(e.id)!) {
+      const other = owner.get(nameKey(n));
+      if (other === undefined) owner.set(nameKey(n), e.id);
+      else parent.set(root(e.id), root(other));
+    }
+  }
+  const groups = new Map<string, CatalogRow[]>();
+  for (const e of exercises) groups.set(root(e.id), [...(groups.get(root(e.id)) ?? []), e]);
+
+  const repoint = [
+    db.prepare("UPDATE block_exercise SET exercise_id = ? WHERE exercise_id = ?"),
+    db.prepare("UPDATE planned_item SET exercise_id = ? WHERE exercise_id = ?"),
+    db.prepare("UPDATE planned_item SET load_ref_exercise_id = ? WHERE load_ref_exercise_id = ?"),
+    db.prepare("UPDATE exercise_test SET exercise_id = ? WHERE exercise_id = ?"),
+  ];
+  const addAlias = db.prepare("INSERT INTO exercise_alias (exercise_id, user_id, alias) VALUES (?, ?, ?)");
+  for (const group of groups.values()) {
+    const [keep, ...rest] = group as [CatalogRow, ...CatalogRow[]];
+    if (rest.length === 0) continue;
+    const flags = (k: "has_weight" | "has_reps" | "has_distance" | "has_duration") => (group.some((e) => e[k] === 1) ? 1 : 0);
+    const names = new Map<string, string>(); // key -> text, the kept name first
+    for (const e of group) for (const n of namesOf.get(e.id)!) if (!names.has(nameKey(n))) names.set(nameKey(n), n);
+    names.delete(nameKey(keep.name));
+    for (const e of rest) {
+      db.prepare("DELETE FROM exercise_alias WHERE exercise_id = ?").run(e.id);
+      for (const move of repoint) move.run(keep.id, e.id);
+      db.prepare("DELETE FROM exercise WHERE id = ?").run(e.id);
+    }
+    db.prepare("DELETE FROM exercise_alias WHERE exercise_id = ?").run(keep.id);
+    for (const alias of names.values()) addAlias.run(keep.id, keep.user_id, alias);
+    db.prepare("UPDATE exercise SET has_weight = ?, has_reps = ?, has_distance = ?, has_duration = ?, note = ?, archived = ? WHERE id = ?").run(
+      flags("has_weight"),
+      flags("has_reps"),
+      flags("has_distance"),
+      flags("has_duration"),
+      keep.note ?? group.find((e) => e.note)?.note ?? null,
+      group.every((e) => e.archived === 1) ? 1 : 0,
+      keep.id,
+    );
+  }
+}
 
 export type Db = DatabaseSync;
 
@@ -185,12 +296,14 @@ export function openDb(path: string): Db {
 }
 
 // Version = position in MIGRATIONS, starting at 1. The table works the same way in Postgres (and is what dbmate uses).
-export function migrate(db: Db, migrations: readonly string[] = MIGRATIONS, now: () => string = isoNow): void {
+export function migrate(db: Db, migrations: readonly Migration[] = MIGRATIONS, now: () => string = isoNow): void {
   db.exec("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL) STRICT");
   const row = db.prepare("SELECT MAX(version) AS v FROM schema_migrations").get() as { v: number | null };
   for (let version = (row.v ?? 0) + 1; version <= migrations.length; version++) {
     transaction(db, () => {
-      db.exec(migrations[version - 1]!);
+      const migration = migrations[version - 1]!;
+      if (typeof migration === "function") migration(db);
+      else db.exec(migration);
       db.prepare("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)").run(version, now());
     });
   }

@@ -48,16 +48,17 @@ type ExerciseRow = {
   last_used_at: string | null;
 };
 
+// The catalog is shared by all users; only "last used" is the asking user's own (first parameter).
 const EXERCISE_SELECT = `
   SELECT e.id, e.name, e.has_weight, e.has_reps, e.has_distance, e.has_duration, e.note, e.archived,
     (SELECT MAX(s.started_at) FROM block_exercise be
        JOIN block b ON b.id = be.block_id
        JOIN session s ON s.id = b.session_id
-      WHERE be.exercise_id = e.id) AS last_used_at
+      WHERE be.exercise_id = e.id AND s.user_id = ?) AS last_used_at
   FROM exercise e`;
 
-function aliasMap(db: Db, userId: string): Map<string, string[]> {
-  const rows = db.prepare("SELECT exercise_id, alias FROM exercise_alias WHERE user_id = ? ORDER BY alias").all(userId) as {
+function aliasMap(db: Db): Map<string, string[]> {
+  const rows = db.prepare("SELECT exercise_id, alias FROM exercise_alias ORDER BY alias").all() as {
     exercise_id: string;
     alias: string;
   }[];
@@ -81,8 +82,8 @@ const toExercise = (row: ExerciseRow, aliases: string[]): Exercise => ({
 // The whole catalog, archived ones included (flagged). Search matches name or alias anywhere, case ignored.
 // Most recently used first, never used ones after that by name.
 export function listExercises(db: Db, userId: string, query?: string): Exercise[] {
-  const aliases = aliasMap(db, userId);
-  const rows = db.prepare(`${EXERCISE_SELECT} WHERE e.user_id = ?`).all(userId) as ExerciseRow[];
+  const aliases = aliasMap(db);
+  const rows = db.prepare(EXERCISE_SELECT).all(userId) as ExerciseRow[];
   const key = query ? nameKey(query) : "";
   return rows
     .map((r) => toExercise(r, aliases.get(r.id) ?? []))
@@ -94,9 +95,9 @@ export function listExercises(db: Db, userId: string, query?: string): Exercise[
 }
 
 export function getExercise(db: Db, userId: string, id: string): Exercise {
-  const row = db.prepare(`${EXERCISE_SELECT} WHERE e.user_id = ? AND e.id = ?`).get(userId, id) as ExerciseRow | undefined;
+  const row = db.prepare(`${EXERCISE_SELECT} WHERE e.id = ?`).get(userId, id) as ExerciseRow | undefined;
   if (!row) throw new NotFoundError("exercise");
-  return toExercise(row, aliasMap(db, userId).get(id) ?? []);
+  return toExercise(row, aliasMap(db).get(id) ?? []);
 }
 
 // Aliases cleaned up: spaces collapsed, duplicates and the exercise's own name dropped.
@@ -112,11 +113,11 @@ function cleanAliases(name: string, aliases: string[]): string[] {
   return result;
 }
 
-// A name or alias may stand for one exercise only, across names and aliases of the user's whole catalog.
-function assertFree(db: Db, userId: string, texts: string[], exceptId: string | null): void {
+// A name or alias may stand for one exercise only, across names and aliases of the whole (shared) catalog.
+function assertFree(db: Db, texts: string[], exceptId: string | null): void {
   const taken = new Map<string, string>();
-  const names = db.prepare("SELECT id, name AS text FROM exercise WHERE user_id = ?").all(userId) as { id: string; text: string }[];
-  const aliases = db.prepare("SELECT exercise_id AS id, alias AS text FROM exercise_alias WHERE user_id = ?").all(userId) as {
+  const names = db.prepare("SELECT id, name AS text FROM exercise").all() as { id: string; text: string }[];
+  const aliases = db.prepare("SELECT exercise_id AS id, alias AS text FROM exercise_alias").all() as {
     id: string;
     text: string;
   }[];
@@ -133,13 +134,13 @@ function writeAliases(db: Db, userId: string, exerciseId: string, aliases: strin
   for (const alias of aliases) insert.run(exerciseId, userId, alias);
 }
 
-// Inside a transaction of the caller.
+// Inside a transaction of the caller. user_id only records who created it.
 export function insertExercise(db: Db, userId: string, input: ExerciseInput): string {
   const name = tidy(input.name);
   const aliases = cleanAliases(name, input.aliases ?? []);
   const fields = normalizeFields(input.fields);
   const id = newId();
-  assertFree(db, userId, [name, ...aliases], null);
+  assertFree(db, [name, ...aliases], null);
   db.prepare(
     `INSERT INTO exercise (id, user_id, name, has_weight, has_reps, has_distance, has_duration, note, archived, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
@@ -171,7 +172,7 @@ export function updateExercise(db: Db, userId: string, id: string, patch: Exerci
     const current = getExercise(db, userId, id);
     const name = patch.name !== undefined ? tidy(patch.name) : current.name;
     const aliases = cleanAliases(name, patch.aliases ?? current.aliases);
-    if (patch.name !== undefined || patch.aliases !== undefined) assertFree(db, userId, [name, ...aliases], id);
+    if (patch.name !== undefined || patch.aliases !== undefined) assertFree(db, [name, ...aliases], id);
     // A field may be added any time (old sets leave it empty); it may only go while no set has a value in it.
     const fields = patch.fields !== undefined ? normalizeFields(patch.fields) : current.fields;
     const kept = current.fields.filter((f) => !fields.includes(f) && fieldInUse(db, id, f));

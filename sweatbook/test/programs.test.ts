@@ -217,3 +217,75 @@ test("start: an archived exercise in the plan is refused, nothing is created", a
   assert.equal((await call("POST", `/api/planned-sessions/${a.id}/start`, {})).status, 409);
   assert.deepEqual((await call("GET", "/api/sessions")).json, []);
 });
+
+test("sharing: others see a shared program, join with their own start, progress and 1RM stay their own", async () => {
+  const { call, as } = setup();
+  const { b, program, a } = await plan(call);
+  const ben = as("ha-user-2");
+
+  // not shared yet: invisible and 404
+  assert.deepEqual((await ben("GET", "/api/programs")).json, []);
+  assert.equal((await ben("POST", `/api/programs/${program.id}/join`, { start_date: "2026-11-02" })).status, 404);
+
+  assert.equal((await call("PATCH", `/api/programs/${program.id}`, { shared: true })).json.shared, true);
+  const listed = (await ben("GET", "/api/programs")).json;
+  assert.deepEqual(listed.map((p: any) => [p.name, p.joined, p.owned, p.done]), [["Bankziehen", false, false, 0]]);
+  // listed is not joined: no access to the tree or the sessions yet
+  assert.equal((await ben("GET", `/api/programs/${program.id}`)).status, 404);
+  assert.equal((await ben("POST", `/api/planned-sessions/${a.id}/start`, {})).status, 404);
+
+  const joined = (await ben("POST", `/api/programs/${program.id}/join`, { start_date: "2026-11-02" })).json;
+  assert.equal(joined.start_date, "2026-11-02");
+  assert.equal(joined.joined, true);
+  assert.equal((await call("GET", `/api/programs/${program.id}`)).json.start_date, "2026-08-31");
+
+  // Ben has no 1RM: the %-line has no weight; with his own it is computed from his value
+  assert.equal(joined.weeks[0].sessions[0].items[1].weight_kg, null);
+  await ben("POST", `/api/exercises/${b.id}/tests`, { kind: "one_rm", tested_on: "2026-10-01", weight_kg: 100 });
+  assert.equal((await ben("GET", `/api/programs/${program.id}`)).json.weeks[0].sessions[0].items[1].weight_kg, 85);
+  assert.equal((await call("GET", `/api/programs/${program.id}`)).json.weeks[0].sessions[0].items[1].weight_kg, 97.5);
+
+  // his progress is his own
+  const started = (await ben("POST", `/api/planned-sessions/${a.id}/start`, {})).json;
+  await ben("POST", `/api/block-exercises/${started.blocks[0].exercises[0].id}/sets`, { sets: [{ reps: 3 }] });
+  await ben("PATCH", `/api/planned-sessions/${program.weeks[0].sessions[1].id}`, { skipped: true });
+  const benState = (await ben("GET", `/api/programs/${program.id}`)).json;
+  const ownerState = (await call("GET", `/api/programs/${program.id}`)).json;
+  assert.deepEqual(benState.weeks[0].sessions.map((s: any) => s.state), ["done", "skipped"]);
+  assert.deepEqual(ownerState.weeks[0].sessions.map((s: any) => s.state), ["open", "open"]);
+  assert.equal(ownerState.weeks[0].sessions[0].session_id, null);
+
+  // members edit the plan; only the owner renames, shares, deletes
+  assert.equal((await ben("PATCH", `/api/planned-items/${program.weeks[0].sessions[0].items[1].id}`, { rest: "2 Min" })).status, 200);
+  assert.equal((await call("GET", `/api/programs/${program.id}`)).json.weeks[0].sessions[0].items[1].rest, "2 Min");
+  assert.equal((await ben("PATCH", `/api/programs/${program.id}`, { name: "Meins" })).status, 403);
+  assert.equal((await ben("PATCH", `/api/programs/${program.id}`, { shared: false })).status, 403);
+  assert.equal((await ben("DELETE", `/api/programs/${program.id}`)).status, 403);
+  assert.equal((await ben("PATCH", `/api/programs/${program.id}`, { archived: true })).json.archived, true);
+  assert.equal((await call("GET", `/api/programs/${program.id}`)).json.archived, false);
+  assert.equal((await call("DELETE", `/api/programs/${program.id}/membership`)).status, 403);
+});
+
+test("sharing: stopping it locks members out and keeps their sessions; sharing again revives them; leaving", async () => {
+  const { call, as } = setup();
+  const { program, a } = await plan(call);
+  const ben = as("ha-user-2");
+  await call("PATCH", `/api/programs/${program.id}`, { shared: true });
+  await ben("POST", `/api/programs/${program.id}/join`, { start_date: "2026-11-02" });
+  const session = (await ben("POST", `/api/planned-sessions/${a.id}/start`, {})).json;
+
+  await call("PATCH", `/api/programs/${program.id}`, { shared: false });
+  assert.equal((await ben("GET", `/api/programs/${program.id}`)).status, 404);
+  assert.deepEqual((await ben("GET", "/api/programs")).json, []);
+  assert.equal((await ben("GET", `/api/sessions/${session.id}`)).status, 200);
+
+  await call("PATCH", `/api/programs/${program.id}`, { shared: true });
+  assert.equal((await ben("GET", `/api/programs/${program.id}`)).json.start_date, "2026-11-02");
+
+  assert.equal((await ben("DELETE", `/api/programs/${program.id}/membership`)).status, 204);
+  assert.equal((await ben("GET", `/api/programs/${program.id}`)).status, 404);
+  assert.equal((await ben("GET", `/api/sessions/${session.id}`)).status, 200);
+
+  await call("DELETE", `/api/programs/${program.id}`);
+  assert.equal((await ben("GET", `/api/sessions/${session.id}`)).json.plan, null);
+});

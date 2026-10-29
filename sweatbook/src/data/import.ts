@@ -2,7 +2,7 @@ import { isoNow, transaction, type Db } from "../db.ts";
 import { InvalidError, nameKey, newId } from "./common.ts";
 import { assertUsable, insertExercise, listExercises, type Exercise, type Field } from "./exercises.ts";
 import type { Range } from "./plan.ts";
-import { checkItem, getProgram, insertPlannedSession, writeItem, type PlanItemInput, type ProgramTree } from "./programs.ts";
+import { checkItem, getProgram, insertPlannedSession, insertProgram, writeItem, type PlanItemInput, type ProgramTree } from "./programs.ts";
 import { createTest, type TestKind } from "./tests.ts";
 
 // A whole program from one JSON file (the shape is validated in app.ts; what depends on the catalog, here). Exercises are
@@ -64,14 +64,7 @@ function run(db: Db, userId: string, file: ImportFile): ImportResult {
     return id;
   };
 
-  const programId = newId();
-  db.prepare("INSERT INTO program (id, user_id, name, start_date, archived, created_at) VALUES (?, ?, ?, ?, 0, ?)").run(
-    programId,
-    userId,
-    file.program.name,
-    file.program.start_date,
-    isoNow(),
-  );
+  const programId = insertProgram(db, userId, { name: file.program.name, start_date: file.program.start_date });
 
   file.tests?.forEach((t, i) => {
     const where = `tests[${i}]`;
@@ -84,7 +77,7 @@ function run(db: Db, userId: string, file: ImportFile): ImportResult {
 
   const seen = new Set<number>();
   const startWeek = file.program.start_week ?? 1;
-  const skip = db.prepare("UPDATE planned_session SET skipped_at = ?, skip_note = ? WHERE id = ?");
+  const skip = db.prepare("INSERT INTO planned_session_skip (planned_session_id, user_id, skipped_at, skip_note) VALUES (?, ?, ?, ?)");
   for (const week of [...file.weeks].sort((a, b) => a.number - b.number)) {
     if (seen.has(week.number)) throw new InvalidError(`weeks: number ${week.number} twice`);
     seen.add(week.number);
@@ -98,7 +91,7 @@ function run(db: Db, userId: string, file: ImportFile): ImportResult {
     );
     for (const session of week.sessions) {
       const sessionId = insertPlannedSession(db, weekId, session.label);
-      if (week.number < startWeek) skip.run(isoNow(), PRE_APP_NOTE, sessionId);
+      if (week.number < startWeek) skip.run(sessionId, userId, isoNow(), PRE_APP_NOTE);
       session.items.forEach((line, i) => {
         const where = `week ${week.number} ${session.label}, line ${i + 1}`;
         try {

@@ -35,8 +35,8 @@ const filled = (value: unknown) => value !== null && value !== undefined;
 export function listTests(db: Db, userId: string, exerciseId: string): ExerciseTest[] {
   getExercise(db, userId, exerciseId);
   return db
-    .prepare(`SELECT ${TEST_COLUMNS} FROM exercise_test t WHERE t.exercise_id = ? ORDER BY t.tested_on DESC, t.rowid DESC`)
-    .all(exerciseId) as ExerciseTest[];
+    .prepare(`SELECT ${TEST_COLUMNS} FROM exercise_test t WHERE t.exercise_id = ? AND t.user_id = ? ORDER BY t.tested_on DESC, t.rowid DESC`)
+    .all(exerciseId, userId) as ExerciseTest[];
 }
 
 export function createTest(db: Db, userId: string, exerciseId: string, input: TestInput): ExerciseTest {
@@ -50,9 +50,10 @@ export function createTest(db: Db, userId: string, exerciseId: string, input: Te
   }
   const id = newId();
   db.prepare(
-    "INSERT INTO exercise_test (id, exercise_id, tested_on, kind, weight_kg, reps, distance_m, duration_s, set_id, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)",
+    "INSERT INTO exercise_test (id, user_id, exercise_id, tested_on, kind, weight_kg, reps, distance_m, duration_s, set_id, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)",
   ).run(
     id,
+    userId,
     exerciseId,
     input.tested_on ?? new Date().toISOString().slice(0, 10),
     input.kind,
@@ -67,20 +68,20 @@ export function createTest(db: Db, userId: string, exerciseId: string, input: Te
 
 // "Rückgängig" also works for a test taken from a set: the set stays, and the test returns only when its sets change.
 export function deleteTest(db: Db, userId: string, id: string): void {
-  const row = db.prepare("SELECT t.id FROM exercise_test t JOIN exercise e ON e.id = t.exercise_id WHERE t.id = ? AND e.user_id = ?").get(id, userId);
+  const row = db.prepare("SELECT id FROM exercise_test WHERE id = ? AND user_id = ?").get(id, userId);
   if (!row) throw new NotFoundError("test");
   db.prepare("DELETE FROM exercise_test WHERE id = ?").run(id);
 }
 
 // The newest 1RM up to and including `day` (null = the newest known), or null when there is none.
-export function latestOneRm(db: Db, exerciseId: string, day: string | null): number | null {
+export function latestOneRm(db: Db, userId: string, exerciseId: string, day: string | null): number | null {
   const row = db
     .prepare(
       `SELECT weight_kg FROM exercise_test
-       WHERE exercise_id = ? AND kind = 'one_rm' AND weight_kg IS NOT NULL AND (? IS NULL OR tested_on <= ?)
+       WHERE user_id = ? AND exercise_id = ? AND kind = 'one_rm' AND weight_kg IS NOT NULL AND (? IS NULL OR tested_on <= ?)
        ORDER BY tested_on DESC, rowid DESC LIMIT 1`,
     )
-    .get(exerciseId, day, day) as { weight_kg: number } | undefined;
+    .get(userId, exerciseId, day, day) as { weight_kg: number } | undefined;
   return row?.weight_kg ?? null;
 }
 
@@ -98,12 +99,12 @@ function beats(a: number[], b: number[]): boolean {
 export function syncSessionTest(db: Db, blockExerciseId: string): void {
   const row = db
     .prepare(
-      `SELECT pi.test_kind, s.started_at, be.exercise_id FROM block_exercise be
+      `SELECT pi.test_kind, s.started_at, s.user_id, be.exercise_id FROM block_exercise be
        JOIN planned_item pi ON pi.id = be.planned_item_id
        JOIN block b ON b.id = be.block_id JOIN session s ON s.id = b.session_id
        WHERE be.id = ?`,
     )
-    .get(blockExerciseId) as { test_kind: TestKind | null; started_at: string; exercise_id: string } | undefined;
+    .get(blockExerciseId) as { test_kind: TestKind | null; started_at: string; user_id: string; exercise_id: string } | undefined;
   if (!row?.test_kind) return;
   db.prepare("DELETE FROM exercise_test WHERE set_id IN (SELECT id FROM set_log WHERE block_exercise_id = ?)").run(blockExerciseId);
   const sets = db
@@ -117,8 +118,8 @@ export function syncSessionTest(db: Db, blockExerciseId: string): void {
   }
   if (!best) return;
   db.prepare(
-    "INSERT INTO exercise_test (id, exercise_id, tested_on, kind, weight_kg, reps, distance_m, duration_s, set_id, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)",
-  ).run(newId(), row.exercise_id, row.started_at.slice(0, 10), row.test_kind, best.weight_kg, best.reps, best.distance_m, best.duration_s, best.id);
+    "INSERT INTO exercise_test (id, user_id, exercise_id, tested_on, kind, weight_kg, reps, distance_m, duration_s, set_id, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)",
+  ).run(newId(), row.user_id, row.exercise_id, row.started_at.slice(0, 10), row.test_kind, best.weight_kg, best.reps, best.distance_m, best.duration_s, best.id);
 }
 
 // The test value the sets of a block exercise produced (shown as "Neuer Testwert · Rückgängig").

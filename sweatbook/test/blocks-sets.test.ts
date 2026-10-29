@@ -150,9 +150,7 @@ test("blocks and sets: other users get 404", async () => {
   const tree = await sessionWith(anna, [e.id]);
   const be = tree.blocks[0].exercises[0].id;
   const set = (await anna("POST", `/api/block-exercises/${be}/sets`, { sets: [{ reps: 5 }] })).json[0];
-  const benExercise = (await ben("POST", "/api/exercises", squat)).json;
-  assert.equal((await ben("POST", `/api/sessions/${tree.id}/blocks`, { exercise_id: benExercise.id })).status, 404);
-  assert.equal((await anna("POST", `/api/sessions/${tree.id}/blocks`, { exercise_id: benExercise.id })).status, 404);
+  assert.equal((await ben("POST", `/api/sessions/${tree.id}/blocks`, { exercise_id: e.id })).status, 404);
   assert.equal((await ben("POST", `/api/block-exercises/${be}/sets`, { sets: [{ reps: 5 }] })).status, 404);
   assert.equal((await ben("PATCH", `/api/sets/${set.id}`, { reps: 6 })).status, 404);
   assert.equal((await ben("DELETE", `/api/sets/${set.id}`)).status, 404);

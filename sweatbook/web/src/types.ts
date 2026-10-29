@@ -118,7 +118,11 @@ export type ProgramSummary = {
   id: string;
   name: string;
   start_date: string; // YYYY-MM-DD, the Monday of week 1
-  archived: boolean;
+  archived: boolean; // the asking user's own, like start_date
+  shared: boolean; // every user can join it
+  owned: boolean; // only the owner renames, shares and deletes
+  joined: boolean; // false = shared by somebody else, not taken up yet
+  owner_name: string | null;
   done: number; // planned sessions done or skipped
   total: number;
   next: NextWorkout | null;

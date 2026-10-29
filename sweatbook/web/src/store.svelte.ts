@@ -2,6 +2,7 @@ import * as api from "./api";
 import { ApiError } from "./api";
 import { goUp, navigate, paths } from "./router.svelte";
 import { load, save } from "./storage";
+import type { PlanTarget } from "./logic/plan-edit";
 import type { Me, SessionSummary, SessionTree, SetInput, SetLog } from "./types";
 
 // Where the "add exercise" sheet puts the exercise it is given.
@@ -13,7 +14,8 @@ export type SheetState =
   | { kind: "session"; sessionId: string }
   | { kind: "block-menu"; sessionId: string; blockId: string }
   | { kind: "log-session" }
-  | { kind: "log-planned"; plannedId: string };
+  | { kind: "log-planned"; plannedId: string }
+  | { kind: "plan-edit"; target: PlanTarget };
 
 export const app = $state({
   ready: false,

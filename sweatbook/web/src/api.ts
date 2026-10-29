@@ -1,3 +1,4 @@
+import type { ItemBody } from "./logic/plan-edit";
 import type {
   Exercise,
   ExerciseInput,
@@ -129,6 +130,26 @@ export const getProgram = (id: string) => request<ProgramTree>("GET", `api/progr
 // skipped: true skips the planned session, false takes it back.
 export const skipPlannedSession = (id: string, skipped: boolean) =>
   request<ProgramTree>("PATCH", `api/planned-sessions/${enc(id)}`, { skipped });
+// Plan changes answer with the whole program, which replaces what the client shows.
+export const createProgram = (name: string, startDate: string) =>
+  request<ProgramTree>("POST", "api/programs", { name, start_date: startDate });
+export const updateProgram = (id: string, patch: { name?: string; start_date?: string; archived?: boolean }) =>
+  request<ProgramTree>("PATCH", `api/programs/${enc(id)}`, patch);
+export const deleteProgram = (id: string) => request<void>("DELETE", `api/programs/${enc(id)}`);
+// copyOf: the week to copy (its sessions and lines); without it the week is empty.
+export const addWeek = (programId: string, week: { phase?: string | null; deload?: boolean; copy_of?: string }) =>
+  request<ProgramTree>("POST", `api/programs/${enc(programId)}/weeks`, week);
+export const updateWeek = (id: string, patch: { phase?: string | null; deload?: boolean }) =>
+  request<ProgramTree>("PATCH", `api/weeks/${enc(id)}`, patch);
+export const deleteWeek = (id: string) => request<ProgramTree>("DELETE", `api/weeks/${enc(id)}`);
+export const addPlannedSession = (weekId: string, label: string) => request<ProgramTree>("POST", `api/weeks/${enc(weekId)}/sessions`, { label });
+export const renamePlannedSession = (id: string, label: string) => request<ProgramTree>("PATCH", `api/planned-sessions/${enc(id)}`, { label });
+export const deletePlannedSession = (id: string) => request<ProgramTree>("DELETE", `api/planned-sessions/${enc(id)}`);
+export const addPlanItem = (plannedId: string, body: ItemBody) => request<ProgramTree>("POST", `api/planned-sessions/${enc(plannedId)}/items`, body);
+export const updatePlanItem = (id: string, body: ItemBody) => request<ProgramTree>("PATCH", `api/planned-items/${enc(id)}`, body);
+export const deletePlanItem = (id: string) => request<ProgramTree>("DELETE", `api/planned-items/${enc(id)}`);
+export const setItemOrder = (plannedId: string, itemIds: string[]) =>
+  request<ProgramTree>("PUT", `api/planned-sessions/${enc(plannedId)}/item-order`, { item_ids: itemIds });
 // With times it is entered afterwards (done at once); without it starts now and ends an open session.
 export const startPlannedSession = (id: string, times: { started_at?: string; ended_at?: string } = {}) =>
   request<SessionTree>("POST", `api/planned-sessions/${enc(id)}/start`, times);

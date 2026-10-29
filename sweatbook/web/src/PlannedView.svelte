@@ -1,9 +1,12 @@
 <script lang="ts">
   import Icon from "./Icon.svelte";
+  import PlanEditor from "./PlanEditor.svelte";
+  import Sheet from "./Sheet.svelte";
   import * as api from "./api";
   import { findPlanned, formatPlanLine, TEST_KIND_NAMES, weekDates } from "./logic/plan";
   import { goUp, navigate, paths } from "./router.svelte";
-  import { guard, openSheet, startPlanned } from "./store.svelte";
+  import { app, closeSheet, guard, openSheet, startPlanned } from "./store.svelte";
+  import type { PlanTarget } from "./logic/plan-edit";
   import type { ProgramTree, SessionSummary } from "./types";
 
   // One planned session: the lines with target and computed weight, then train it, enter it afterwards or skip it.
@@ -31,6 +34,9 @@
     });
     busy = false;
   }
+
+  // Small corrections of the plan from the phone; the full editor is the plan grid on a wide screen.
+  const edit = (target: PlanTarget) => openSheet({ kind: "plan-edit", target });
 
   async function start() {
     busy = true;
@@ -61,18 +67,23 @@
       {#each session.items as item (item.id)}
         {#if item.exercise}
           <div class="card line">
-            <span class="name">{item.exercise.name}{item.label ? ` · ${item.label}` : ""}</span>
+            <div class="line-head">
+              <span class="name">{item.exercise.name}{item.label ? ` · ${item.label}` : ""}</span>
+              <button type="button" class="icon-btn" aria-label="Zeile bearbeiten" onclick={() => edit({ kind: "item", id: item.id })}><Icon name="pencil" size={20} /></button>
+            </div>
             <span class="num-text">{formatPlanLine(item)}</span>
             {#if item.rest}<span class="muted">Pause {item.rest}</span>{/if}
             {#if item.note}<span class="muted">„{item.note}“</span>{/if}
             {#if item.test_kind}<span class="label test">Test · {TEST_KIND_NAMES[item.test_kind]}</span>{/if}
           </div>
         {:else}
-          <p class="note muted">{item.note}</p>
+          <p class="note muted">{item.note} <button type="button" class="link-btn" onclick={() => edit({ kind: "item", id: item.id })}>Bearbeiten</button></p>
         {/if}
       {:else}
         <p class="muted">Diese Einheit hat noch keine Planzeilen.</p>
       {/each}
+
+      <button type="button" class="link-btn" onclick={() => edit({ kind: "session", id: plannedId })}>Einheit bearbeiten</button>
 
       {#if session.state === "skipped"}
         <button type="button" class="link-btn" disabled={busy} onclick={() => skip(false)}>Überspringen rückgängig</button>
@@ -102,7 +113,24 @@
   {/if}
 </div>
 
+{#if app.sheet.kind === "plan-edit" && program}
+  <Sheet title="Plan bearbeiten">
+    {#key JSON.stringify(app.sheet.target)}
+      <PlanEditor {program} target={app.sheet.target} onprogram={(p) => (program = p)} onselect={(t) => (t ? openSheet({ kind: "plan-edit", target: t }) : closeSheet())} />
+    {/key}
+  </Sheet>
+{/if}
+
 <style>
+  .line-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .line-head .icon-btn {
+    margin: -8px -8px -8px 0;
+  }
   .head {
     display: flex;
     flex-direction: column;

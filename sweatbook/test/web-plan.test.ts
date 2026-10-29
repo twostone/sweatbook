@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { cardLine, currentWeek, findPlanned, formatPlanLine, formatRange, groupWeeksByPhase, setProgress, weekDates } from "../web/src/logic/plan.ts";
+import { cardLine, currentWeek, findPlanned, formatPlanLine, clusterProgress, formatRange, groupWeeksByPhase, setProgress, weekDates } from "../web/src/logic/plan.ts";
 import type { PlanItem, PlanWeek, SessionExercise } from "../web/src/types.ts";
 
 const item = (over: Partial<PlanItem>): PlanItem => ({
@@ -86,6 +86,13 @@ test("groupWeeksByPhase: neighbouring weeks of one phase form a cluster", () => 
   assert.deepEqual(shape([w(1, "a"), w(2, "p"), w(3, "a")]), [["Aufbau", [1]], ["Peak", [2]], ["Aufbau", [3]]]);
   assert.deepEqual(shape([w(1, null), w(2, null), w(3, "p")]), [[null, [1, 2]], ["Peak", [3]]]);
   assert.deepEqual(shape([]), []);
+});
+
+test("clusterProgress: weeks and the sessions done or skipped", () => {
+  const s = (state: "done" | "skipped" | "open") => ({ id: state, position: 0, label: "A", state, skip_note: null, session_id: null, items: [] });
+  const w = (...states: ("done" | "skipped" | "open")[]): PlanWeek => ({ id: "w", number: 1, phase_id: null, phase: null, deload: false, sessions: states.map(s) });
+  assert.equal(clusterProgress([w("done", "skipped"), w("open", "open")]), "2 Wochen · 2 von 4 Einheiten");
+  assert.equal(clusterProgress([w()]), "1 Woche · 0 von 0 Einheiten");
 });
 
 test("weekDates: Monday to Sunday counted from the start date", () => {

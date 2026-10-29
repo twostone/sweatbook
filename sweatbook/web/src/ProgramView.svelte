@@ -3,7 +3,7 @@
   import PlanEditor from "./PlanEditor.svelte";
   import * as api from "./api";
   import type { PlanTarget } from "./logic/plan-edit";
-  import { currentWeek, formatPlanLine, formatTest, groupWeeksByPhase, stateText, TEST_KIND_NAMES, weekDates } from "./logic/plan";
+  import { currentWeek, formatPlanLine, clusterProgress, formatTest, groupWeeksByPhase, stateText, TEST_KIND_NAMES, weekDates } from "./logic/plan";
   import { goUp, navigate, paths } from "./router.svelte";
   import { guard } from "./store.svelte";
   import type { ProgramTree } from "./types";
@@ -31,6 +31,15 @@
     media.addEventListener("change", update);
     return () => media.removeEventListener("change", update);
   });
+
+  // Collapsed phases (by id); not stored, so every load starts with all phases open.
+  let collapsed = $state(new Set<string>());
+  const isOpen = (id: string) => !collapsed.has(id);
+  function toggle(id: string) {
+    const next = new Set(collapsed);
+    if (!next.delete(id)) next.add(id);
+    collapsed = next;
+  }
 
   let selected = $state<PlanTarget | null>(null);
   const isSelected = (t: PlanTarget) => selected?.kind === t.kind && "id" in selected && "id" in t && selected.id === t.id;
@@ -67,11 +76,16 @@
         {#each clusters as cluster, c (c)}
           {#if cluster.phase}
             {@const ph = cluster.phase}
-            <button type="button" class="phase-head" class:selected={isSelected({ kind: "phase", id: ph.id })} onclick={() => (selected = { kind: "phase", id: ph.id })}>
-              <span class="label">{ph.name}</span>
-              {#if ph.note}<span class="muted">{ph.note}</span>{/if}
-            </button>
+            <div class="phase-bar">
+              <button type="button" class="icon-btn fold" class:open={isOpen(ph.id)} aria-expanded={isOpen(ph.id)} aria-label={`${ph.name} ${isOpen(ph.id) ? "einklappen" : "aufklappen"}`} onclick={() => toggle(ph.id)}><Icon name="chevron" size={18} /></button>
+              <button type="button" class="phase-head" class:selected={isSelected({ kind: "phase", id: ph.id })} onclick={() => (selected = { kind: "phase", id: ph.id })}>
+                <span class="label">{ph.name}</span>
+                {#if ph.note}<span class="muted">{ph.note}</span>{/if}
+                {#if !isOpen(ph.id)}<span class="muted">{clusterProgress(cluster.weeks)}</span>{/if}
+              </button>
+            </div>
           {/if}
+          {#if !cluster.phase || isOpen(cluster.phase.id)}
           <div class="weeks">
           {#each cluster.weeks as week (week.id)}
             <section class="col" class:current={week.id === current?.id} aria-label={`Woche ${week.number}`}>
@@ -105,13 +119,17 @@
               {/each}
             </section>
           {/each}
-          {#if c === clusters.length - 1}
-            <button type="button" class="col add-week" onclick={() => guard(async () => { program = await api.addWeek(program!.id, {}); })}>
-              <Icon name="plus" />Woche
-            </button>
-          {/if}
           </div>
+          {/if}
         {/each}
+        <div class="weeks">
+          <button type="button" class="col add-week" onclick={() => guard(async () => { program = await api.addWeek(program!.id, {}); })}>
+            <Icon name="plus" />Woche
+          </button>
+          <button type="button" class="col add-week" onclick={() => (selected = { kind: "new-phase" })}>
+            <Icon name="plus" />Abschnitt
+          </button>
+        </div>
         {@render testsCard(program)}
       </main>
       {#if selected}
@@ -131,12 +149,18 @@
       <p class="muted summary">
         {program.done} von {program.total} Einheiten{program.next ? "" : " · abgeschlossen"}
       </p>
-      {#each program.weeks as week, i (week.id)}
-        {#if week.phase && week.phase_id !== program.weeks[i - 1]?.phase_id}
-          <h2 class="label phase">{week.phase}</h2>
-          {@const note = program.phases.find((p) => p.id === week.phase_id)?.note}
-          {#if note}<p class="muted phase-note">{note}</p>{/if}
+      {#each clusters as cluster, c (c)}
+        {#if cluster.phase}
+          {@const ph = cluster.phase}
+          <button type="button" class="phase-fold" aria-expanded={isOpen(ph.id)} onclick={() => toggle(ph.id)}>
+            <span class="fold" class:open={isOpen(ph.id)}><Icon name="chevron" size={18} /></span>
+            <span class="label">{ph.name}</span>
+            {#if !isOpen(ph.id)}<span class="muted">{clusterProgress(cluster.weeks)}</span>{/if}
+          </button>
+          {#if ph.note}<p class="muted phase-note">{ph.note}</p>{/if}
         {/if}
+        {#if !cluster.phase || isOpen(cluster.phase.id)}
+        {#each cluster.weeks as week (week.id)}
         <details class="card week" open={week.id === current?.id}>
           <summary>
             <span class="num-text">Woche {week.number}</span>
@@ -161,6 +185,8 @@
             {/each}
           </div>
         </details>
+        {/each}
+        {/if}
       {/each}
 
       {@render testsCard(program)}
@@ -309,13 +335,37 @@
   .phase-note {
     margin: 2px 4px 0;
   }
+  .phase-bar {
+    display: flex;
+    align-items: center;
+    margin-top: 8px;
+  }
+  .fold {
+    transition: transform 0.15s;
+  }
+  .fold.open,
+  .icon-btn.fold.open :global(svg) {
+    transform: rotate(90deg);
+  }
+  .phase-fold {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: var(--tap);
+    margin-top: 8px;
+    padding: 0 4px;
+    border: 0;
+    background: transparent;
+    text-align: left;
+    flex-wrap: wrap;
+  }
   .phase-head {
+    flex: 1;
     display: flex;
     flex-wrap: wrap;
     align-items: baseline;
     gap: 2px 10px;
     min-height: var(--tap);
-    margin-top: 8px;
     padding: 4px 8px;
     border: 0;
     border-radius: var(--radius);

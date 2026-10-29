@@ -153,6 +153,7 @@ export function moved(ids: string[], id: string, step: -1 | 1): string[] {
 export type PlanTarget =
   | { kind: "program" }
   | { kind: "phase"; id: string }
+  | { kind: "new-phase" }
   | { kind: "week"; id: string }
   | { kind: "session"; id: string }
   | { kind: "item"; id: string }

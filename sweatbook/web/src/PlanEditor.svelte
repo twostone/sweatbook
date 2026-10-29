@@ -60,6 +60,20 @@
   // Phase
   let phaseName = $state(phaseOf(start.program, start.target)?.name ?? "");
   let phaseNote = $state(phaseOf(start.program, start.target)?.note ?? "");
+  // New phase
+  let newPhaseName = $state("");
+  const phaseNameTaken = $derived(program.phases.some((p) => p.name.toLocaleLowerCase("de") === newPhaseName.trim().toLocaleLowerCase("de")));
+  // A phase exists with its first week: the new one is empty and at the end of the program.
+  async function createPhase() {
+    let created: ProgramTree | null = null;
+    await run(
+      async () => (created = await api.addWeek(program.id, { phase: newPhaseName.trim() })),
+      () => {
+        const id = created?.weeks.at(-1)?.phase_id;
+        if (id) onselect({ kind: "phase", id });
+      },
+    );
+  }
   // Week
   let phase = $state(find(start.program, start.target).week?.phase ?? "");
   let deload = $state(find(start.program, start.target).week?.deload ?? false);
@@ -120,6 +134,12 @@
       busy = false;
       if (ok) goUp(paths.programs());
     })}
+  {:else if target.kind === "new-phase"}
+    <h2 class="label">Neuer Abschnitt</h2>
+    <label>Name<input class="field" bind:value={newPhaseName} maxlength="100" placeholder="z. B. Aufbau" /></label>
+    {#if phaseNameTaken}<p class="muted">Diesen Namen gibt es schon.</p>{/if}
+    <p class="muted">Legt den Abschnitt mit einer leeren Woche am Ende des Programms an.</p>
+    <button type="button" class="btn strong" disabled={busy || !newPhaseName.trim() || phaseNameTaken} onclick={createPhase}>Anlegen</button>
   {:else if target.kind === "phase" && foundPhase}
     {@const ph = foundPhase}
     <h2 class="label">Abschnitt</h2>
@@ -131,7 +151,8 @@
   {:else if target.kind === "week" && found.week}
     {@const week = found.week}
     <h2 class="label">Woche {week.number} · {weekDates(program.start_date, week.number)}</h2>
-    <label>Abschnitt<input class="field" bind:value={phase} maxlength="100" placeholder="z. B. Aufbau" /></label>
+    <label>Abschnitt<input class="field" list="phase-names" bind:value={phase} maxlength="100" placeholder="z. B. Aufbau" /></label>
+    <datalist id="phase-names">{#each program.phases as ph (ph.id)}<option value={ph.name}></option>{/each}</datalist>
     <label class="check"><input type="checkbox" bind:checked={deload} />Deload-Woche</label>
     <button type="button" class="btn strong" disabled={busy} onclick={() => run(() => api.updateWeek(week.id, { phase: phase.trim() || null, deload }))}>Speichern</button>
     <label>Neue Einheit<input class="field" bind:value={newLabel} maxlength="20" placeholder={nextLabel} /></label>

@@ -204,7 +204,7 @@ Actions to create and approve pull requests“.
   aus dem Plan vor (Gewicht, obere Grenze je Soll; was der Plan offen lässt, folgt der alten Regel in `prefill.ts`),
   solange geplante Sätze übrig sind. Ein Satz auf einer Test-Planzeile erzeugt einen Testwert auf dem Server; der Store
   holt danach nur `planned` der Übung nach (`refreshTest`), damit „Neuer Testwert · Rückgängig“ stimmt.
-- **Plan bearbeiten (Client):** `ProgramView` zeigt ab 900 px Breite ein Raster (eine Spalte je Woche, nach Abschnitt in Cluster gruppiert, die umbrechen statt zu scrollen; `groupWeeksByPhase`; die Überschrift öffnet den Abschnitt im Editor) mit Seitenleiste
+- **Plan bearbeiten (Client):** `ProgramView` zeigt ab 900 px Breite ein Raster (eine Spalte je Woche, nach Abschnitt in Cluster gruppiert, die umbrechen statt zu scrollen; `groupWeeksByPhase`; die Überschrift öffnet den Abschnitt im Editor, der Pfeil klappt ihn ein, nicht gespeichert, beim Laden alles offen; „Abschnitt“ am Rasterende legt über `new-phase` einen Abschnitt mit leerer Woche an, nur am Desktop) mit Seitenleiste
   (`PlanEditor`), darunter die Wochenliste. Auf dem Handy bearbeitet man Zeilen und Einheiten aus `PlannedView` über ein
   Sheet (`plan-edit` in `SheetState`, der Editor hält nur IDs). Jede Änderung antwortet mit dem ganzen Programm und ersetzt
   den Zustand; Formular ↔ API-Body und Spannen (`„5–8“`) stehen in `logic/plan-edit.ts` und `logic/range.ts`. Kein Offline-Entwurf für den Plan.

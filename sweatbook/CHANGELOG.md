@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.0](https://github.com/twostone/sweatbook/compare/v1.5.0...v1.6.0) (2026-10-29)
+
+
+### Neu
+
+* **plan:** Abschnitte einklappbar, Button für neuen Abschnitt ([#28](https://github.com/twostone/sweatbook/issues/28)) ([f9e3edc](https://github.com/twostone/sweatbook/commit/f9e3edc1de7e308449c89ee9f814f1801a6070c0))
+
 ## [1.5.0](https://github.com/twostone/sweatbook/compare/v1.4.0...v1.5.0) (2026-10-29)
 
 

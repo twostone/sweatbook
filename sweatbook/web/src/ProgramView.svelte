@@ -3,13 +3,13 @@
   import PlanEditor from "./PlanEditor.svelte";
   import * as api from "./api";
   import type { PlanTarget } from "./logic/plan-edit";
-  import { currentWeek, formatPlanLine, formatTest, stateText, TEST_KIND_NAMES, weekDates } from "./logic/plan";
+  import { currentWeek, formatPlanLine, formatTest, groupWeeksByPhase, stateText, TEST_KIND_NAMES, weekDates } from "./logic/plan";
   import { goUp, navigate, paths } from "./router.svelte";
   import { guard } from "./store.svelte";
   import type { ProgramTree } from "./types";
 
   // A program: the weeks by phase with the state of each planned session, the current week open, and the test values.
-  // From WIDE_QUERY on it is a grid of week columns with an editor beside it; below, the weeks are a list and lines are
+  // From WIDE_QUERY on it is week columns, clustered by phase and wrapping, with an editor beside it; below, the weeks are a list and lines are
   // edited from the planned session page.
   let { programId }: { programId: string } = $props();
   let program = $state<ProgramTree | null>(null);
@@ -21,6 +21,7 @@
   });
 
   const current = $derived(program ? currentWeek(program.weeks) : null);
+  const clusters = $derived(program ? groupWeeksByPhase(program.weeks, program.phases) : []);
 
   const WIDE_QUERY = "(min-width: 900px)";
   const media = window.matchMedia(WIDE_QUERY);
@@ -63,14 +64,21 @@
       <main class="plan">
         <h1 class="display page-title">{program.name}</h1>
         <p class="muted summary">{program.done} von {program.total} Einheiten{program.next ? "" : " · abgeschlossen"}</p>
-        <div class="weeks">
-          {#each program.weeks as week, i (week.id)}
+        {#each clusters as cluster, c (c)}
+          {#if cluster.phase}
+            {@const ph = cluster.phase}
+            <button type="button" class="phase-head" class:selected={isSelected({ kind: "phase", id: ph.id })} onclick={() => (selected = { kind: "phase", id: ph.id })}>
+              <span class="label">{ph.name}</span>
+              {#if ph.note}<span class="muted">{ph.note}</span>{/if}
+            </button>
+          {/if}
+          <div class="weeks">
+          {#each cluster.weeks as week (week.id)}
             <section class="col" class:current={week.id === current?.id} aria-label={`Woche ${week.number}`}>
               <button type="button" class="col-head" class:selected={isSelected({ kind: "week", id: week.id })} onclick={() => (selected = { kind: "week", id: week.id })}>
                 <span class="num-text">Woche {week.number}</span>
                 <span class="muted">{weekDates(program.start_date, week.number)}</span>
                 {#if week.deload}<span class="label deload">Deload</span>{/if}
-                {#if week.phase && week.phase !== program.weeks[i - 1]?.phase}<span class="label">{week.phase}</span>{/if}
               </button>
               {#each week.sessions as s (s.id)}
                 <div class="card unit {s.state}">
@@ -97,10 +105,13 @@
               {/each}
             </section>
           {/each}
-          <button type="button" class="col add-week" onclick={() => guard(async () => { program = await api.addWeek(program!.id, {}); })}>
-            <Icon name="plus" />Woche
-          </button>
-        </div>
+          {#if c === clusters.length - 1}
+            <button type="button" class="col add-week" onclick={() => guard(async () => { program = await api.addWeek(program!.id, {}); })}>
+              <Icon name="plus" />Woche
+            </button>
+          {/if}
+          </div>
+        {/each}
         {@render testsCard(program)}
       </main>
       {#if selected}
@@ -121,8 +132,10 @@
         {program.done} von {program.total} Einheiten{program.next ? "" : " · abgeschlossen"}
       </p>
       {#each program.weeks as week, i (week.id)}
-        {#if week.phase && week.phase !== program.weeks[i - 1]?.phase}
+        {#if week.phase && week.phase_id !== program.weeks[i - 1]?.phase_id}
           <h2 class="label phase">{week.phase}</h2>
+          {@const note = program.phases.find((p) => p.id === week.phase_id)?.note}
+          {#if note}<p class="muted phase-note">{note}</p>{/if}
         {/if}
         <details class="card week" open={week.id === current?.id}>
           <summary>
@@ -177,8 +190,8 @@
   .weeks {
     display: flex;
     gap: 12px;
+    flex-wrap: wrap;
     align-items: flex-start;
-    overflow-x: auto;
     padding: 8px 4px 12px;
   }
   .col {
@@ -292,6 +305,22 @@
   }
   .phase {
     margin: 12px 4px 0;
+  }
+  .phase-note {
+    margin: 2px 4px 0;
+  }
+  .phase-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 2px 10px;
+    min-height: var(--tap);
+    margin-top: 8px;
+    padding: 4px 8px;
+    border: 0;
+    border-radius: var(--radius);
+    background: transparent;
+    text-align: left;
   }
   .week {
     padding: 0 12px;

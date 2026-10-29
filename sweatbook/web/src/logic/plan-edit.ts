@@ -152,6 +152,7 @@ export function moved(ids: string[], id: string, step: -1 | 1): string[] {
 // What the editor works on; it lives in a sheet's history state, so it holds only ids.
 export type PlanTarget =
   | { kind: "program" }
+  | { kind: "phase"; id: string }
   | { kind: "week"; id: string }
   | { kind: "session"; id: string }
   | { kind: "item"; id: string }

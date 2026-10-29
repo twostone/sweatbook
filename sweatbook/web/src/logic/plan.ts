@@ -1,4 +1,4 @@
-import type { ExerciseTest, PlanItem, PlanWeek, PlannedSession, Range, SessionExercise, TestKind } from "../types.ts";
+import type { ExerciseTest, PlanItem, PlanPhase, PlanWeek, PlannedSession, Range, SessionExercise, TestKind } from "../types.ts";
 import { formatKg, summarize } from "./format.ts";
 import { formatDuration } from "./numbers.ts";
 
@@ -70,6 +70,18 @@ export function stateText(session: PlannedSession): string {
 // The week to show open: the one with the next open planned session, else the last.
 export function currentWeek(weeks: PlanWeek[]): PlanWeek | null {
   return weeks.find((w) => w.sessions.some((s) => s.state === "open")) ?? weeks.at(-1) ?? null;
+}
+
+// Neighbouring weeks of the same phase form one cluster; weeks without a phase cluster without a title.
+export function groupWeeksByPhase(weeks: PlanWeek[], phases: PlanPhase[]): { phase: PlanPhase | null; weeks: PlanWeek[] }[] {
+  const clusters: { phase: PlanPhase | null; weeks: PlanWeek[] }[] = [];
+  for (const week of weeks) {
+    const phase = phases.find((p) => p.id === week.phase_id) ?? null;
+    const last = clusters.at(-1);
+    if (last && last.phase?.id === phase?.id) last.weeks.push(week);
+    else clusters.push({ phase, weeks: [week] });
+  }
+  return clusters;
 }
 
 // The Monday of a week and its Sunday as "31.8.–6.9.", counted from the program's start date (YYYY-MM-DD).

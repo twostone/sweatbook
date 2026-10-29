@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.3.0](https://github.com/twostone/sweatbook/compare/v1.2.0...v1.3.0) (2026-10-29)
+
+
+### Neu
+
+* Plan aus JSON-Datei importieren ([#14](https://github.com/twostone/sweatbook/issues/14)) ([65d43a3](https://github.com/twostone/sweatbook/commit/65d43a3f58c3771bdfdee21319e89a01e20079d9))
+* Plan bearbeiten mit Wochenraster am Desktop ([#17](https://github.com/twostone/sweatbook/issues/17)) ([1191198](https://github.com/twostone/sweatbook/commit/11911986283efb13469bbbe07912468abc8a73c1))
+* Programme, Planzeilen und Testwerte im Backend ([#13](https://github.com/twostone/sweatbook/issues/13)) ([a1717c2](https://github.com/twostone/sweatbook/commit/a1717c2f66fc434716a04df9e973b6cb6e2b79cc))
+* Satzfelder pro Übung statt fester Satzarten ([#11](https://github.com/twostone/sweatbook/issues/11)) ([67ff24d](https://github.com/twostone/sweatbook/commit/67ff24df7a1ffabef94d231050ee60d3c0a2625d))
+* Training aus dem Plan ([#15](https://github.com/twostone/sweatbook/issues/15)) ([8dc6de7](https://github.com/twostone/sweatbook/commit/8dc6de75bf2d423e845d0dc74d9cf4938900cf7e))
+
 ## [1.2.0](https://github.com/twostone/sweatbook/compare/v1.1.0...v1.2.0) (2026-10-24)
 
 

@@ -1,5 +1,6 @@
 import { isoNow, transaction, type Db } from "../db.ts";
 import { InvalidError, newId, nextPosition, NotFoundError, toBool } from "./common.ts";
+import { syncSessionTest } from "./tests.ts";
 import { fieldsOf, FIELDS, SET_COLUMN, VALUE_FIELDS, type Field } from "./exercises.ts";
 
 // A logged set. weight_kg null = bodyweight (a value is added weight). A set that exists is done: there is no tick
@@ -91,6 +92,7 @@ export function insertSet(db: Db, owner: OwnedBlockExercise, input: SetInput): s
     input.note ?? null,
     isoNow(),
   );
+  syncSessionTest(db, owner.id);
   return id;
 }
 
@@ -134,10 +136,14 @@ export function updateSet(db: Db, userId: string, setId: string, patch: SetInput
     merged.note,
     setId,
   );
+  syncSessionTest(db, owner.id);
   return getSet(db, setId);
 }
 
 export function deleteSet(db: Db, userId: string, setId: string): void {
-  ownedSet(db, userId, setId);
-  db.prepare("DELETE FROM set_log WHERE id = ?").run(setId);
+  const { owner } = ownedSet(db, userId, setId);
+  transaction(db, () => {
+    db.prepare("DELETE FROM set_log WHERE id = ?").run(setId); // takes a test taken from it along (cascade)
+    syncSessionTest(db, owner.id); // … which the next best set may replace
+  });
 }

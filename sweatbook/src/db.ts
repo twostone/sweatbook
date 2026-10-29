@@ -95,6 +95,82 @@ export const MIGRATIONS: readonly string[] = [
   ALTER TABLE exercise DROP COLUMN metrics;
   ALTER TABLE set_log ADD COLUMN distance_m INTEGER CHECK (distance_m >= 0);
   `,
+  // v4: Phase 2, programs (multi-week plans with targets), test values and the links from a session back to its plan.
+  `
+  CREATE TABLE program (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES app_user(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    start_date TEXT NOT NULL,
+    archived INTEGER NOT NULL DEFAULT 0 CHECK (archived IN (0, 1)),
+    created_at TEXT NOT NULL
+  ) STRICT;
+  CREATE INDEX program_user ON program(user_id);
+
+  CREATE TABLE program_week (
+    id TEXT PRIMARY KEY,
+    program_id TEXT NOT NULL REFERENCES program(id) ON DELETE CASCADE,
+    number INTEGER NOT NULL CHECK (number >= 1),
+    phase TEXT,
+    deload INTEGER NOT NULL DEFAULT 0 CHECK (deload IN (0, 1)),
+    UNIQUE (program_id, number)
+  ) STRICT;
+
+  CREATE TABLE planned_session (
+    id TEXT PRIMARY KEY,
+    week_id TEXT NOT NULL REFERENCES program_week(id) ON DELETE CASCADE,
+    position INTEGER NOT NULL,
+    label TEXT NOT NULL,
+    skipped_at TEXT,
+    skip_note TEXT
+  ) STRICT;
+  CREATE INDEX planned_session_week ON planned_session(week_id, position);
+
+  CREATE TABLE planned_item (
+    id TEXT PRIMARY KEY,
+    planned_session_id TEXT NOT NULL REFERENCES planned_session(id) ON DELETE CASCADE,
+    position INTEGER NOT NULL,
+    exercise_id TEXT REFERENCES exercise(id) ON DELETE RESTRICT,
+    label TEXT,
+    sets_min INTEGER CHECK (sets_min >= 1),
+    sets_max INTEGER CHECK (sets_max >= 1),
+    reps_min INTEGER CHECK (reps_min >= 0),
+    reps_max INTEGER CHECK (reps_max >= 0),
+    distance_min_m INTEGER CHECK (distance_min_m >= 0),
+    distance_max_m INTEGER CHECK (distance_max_m >= 0),
+    duration_min_s INTEGER CHECK (duration_min_s >= 0),
+    duration_max_s INTEGER CHECK (duration_max_s >= 0),
+    to_max INTEGER NOT NULL DEFAULT 0 CHECK (to_max IN (0, 1)),
+    load_kg REAL CHECK (load_kg >= 0),
+    load_pct REAL CHECK (load_pct > 0),
+    load_ref_exercise_id TEXT REFERENCES exercise(id) ON DELETE RESTRICT,
+    test_kind TEXT CHECK (test_kind IN ('one_rm', 'best')),
+    rest TEXT,
+    note TEXT,
+    params TEXT,
+    CHECK (load_kg IS NULL OR load_pct IS NULL),
+    CHECK ((load_pct IS NULL) = (load_ref_exercise_id IS NULL))
+  ) STRICT;
+  CREATE INDEX planned_item_session ON planned_item(planned_session_id, position);
+
+  CREATE TABLE exercise_test (
+    id TEXT PRIMARY KEY,
+    exercise_id TEXT NOT NULL REFERENCES exercise(id) ON DELETE CASCADE,
+    tested_on TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('one_rm', 'best')),
+    weight_kg REAL CHECK (weight_kg >= 0),
+    reps INTEGER CHECK (reps >= 0),
+    distance_m INTEGER CHECK (distance_m >= 0),
+    duration_s INTEGER CHECK (duration_s >= 0),
+    set_id TEXT REFERENCES set_log(id) ON DELETE CASCADE, -- a test taken from a set goes with it
+    note TEXT
+  ) STRICT;
+  CREATE INDEX exercise_test_exercise ON exercise_test(exercise_id, tested_on);
+
+  ALTER TABLE session ADD COLUMN planned_session_id TEXT REFERENCES planned_session(id) ON DELETE SET NULL;
+  ALTER TABLE block_exercise ADD COLUMN planned_item_id TEXT REFERENCES planned_item(id) ON DELETE SET NULL;
+  CREATE INDEX session_planned ON session(planned_session_id);
+  `,
 ];
 
 export type Db = DatabaseSync;

@@ -1,6 +1,7 @@
 import { isoNow, transaction, type Db } from "../db.ts";
 import { InvalidError, newId, NotFoundError } from "./common.ts";
 import { getExercise, type Field } from "./exercises.ts";
+import { plannedOfBlockExercise, planOfSession, PlanContext, type SessionPlan, type SessionPlanned } from "./plan.ts";
 import { SET_COLUMNS, toSet, type SetLog } from "./sets.ts";
 
 export type SessionSummary = {
@@ -23,14 +24,15 @@ export type SessionExercise = {
   note: string | null; // for this session only, unlike the catalog note
   sets: SetLog[];
   last_time: LastTime | null;
+  planned: SessionPlanned | null; // the plan line this exercise came from, with targets and computed weight
 };
 export type SessionBlock = { id: string; position: number; type: "straight" | "superset"; exercises: SessionExercise[] };
-export type SessionTree = Omit<SessionSummary, "block_count" | "set_count"> & { blocks: SessionBlock[] };
+export type SessionTree = Omit<SessionSummary, "block_count" | "set_count"> & { plan: SessionPlan | null; blocks: SessionBlock[] };
 
 export type SessionInput = { title?: string | null; started_at?: string; ended_at?: string; note?: string | null };
 export type SessionPatch = { title?: string | null; started_at?: string; ended_at?: string | null; note?: string | null };
 
-type SessionRow = { id: string; title: string | null; started_at: string; ended_at: string | null; note: string | null };
+type SessionRow = { id: string; title: string | null; started_at: string; ended_at: string | null; note: string | null; planned_session_id: string | null };
 
 const MAX_LIST = 100;
 
@@ -51,7 +53,7 @@ export function listSessions(db: Db, userId: string, opts: { before?: string; li
 }
 
 function sessionRow(db: Db, userId: string, id: string): SessionRow {
-  const row = db.prepare("SELECT id, title, started_at, ended_at, note FROM session WHERE id = ? AND user_id = ?").get(id, userId) as
+  const row = db.prepare("SELECT id, title, started_at, ended_at, note, planned_session_id FROM session WHERE id = ? AND user_id = ?").get(id, userId) as
     | SessionRow
     | undefined;
   if (!row) throw new NotFoundError("session");
@@ -74,25 +76,30 @@ function endOtherOpenSessions(db: Db, userId: string, exceptId: string): void {
   ).run(userId, exceptId);
 }
 
-// A session given an end is one entered afterwards: it is done at once, so it leaves an open session running.
-export function createSession(db: Db, userId: string, input: SessionInput): SessionTree {
+// Inside a transaction of the caller. A session given an end is one entered afterwards: it is done at once, so it
+// leaves an open session running.
+export function insertSession(db: Db, userId: string, input: SessionInput, plannedSessionId: string | null = null): string {
   const id = newId();
   const now = isoNow();
   const startedAt = input.started_at ?? now;
   const endedAt = input.ended_at ?? null;
   if (endedAt !== null && endedAt < startedAt) throw new InvalidError("ended_at before started_at");
-  transaction(db, () => {
-    if (endedAt === null) endOtherOpenSessions(db, userId, id);
-    db.prepare("INSERT INTO session (id, user_id, title, started_at, ended_at, note, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)").run(
-      id,
-      userId,
-      input.title ?? null,
-      startedAt,
-      endedAt,
-      input.note ?? null,
-      now,
-    );
-  });
+  if (endedAt === null) endOtherOpenSessions(db, userId, id);
+  db.prepare("INSERT INTO session (id, user_id, title, started_at, ended_at, note, created_at, planned_session_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)").run(
+    id,
+    userId,
+    input.title ?? null,
+    startedAt,
+    endedAt,
+    input.note ?? null,
+    now,
+    plannedSessionId,
+  );
+  return id;
+}
+
+export function createSession(db: Db, userId: string, input: SessionInput): SessionTree {
+  const id = transaction(db, () => insertSession(db, userId, input));
   return getSession(db, userId, id);
 }
 
@@ -162,12 +169,15 @@ export function getSession(db: Db, userId: string, id: string): SessionTree {
     position: number;
     type: "straight" | "superset";
   }[];
-  const exercisesOf = db.prepare("SELECT id, position, exercise_id, note FROM block_exercise WHERE block_id = ? ORDER BY position");
+  const exercisesOf = db.prepare("SELECT id, position, exercise_id, note, planned_item_id FROM block_exercise WHERE block_id = ? ORDER BY position");
+  const { planned_session_id, ...fields } = session;
+  const ctx = new PlanContext(db, userId);
   return {
-    ...session,
+    ...fields,
+    plan: planOfSession(db, planned_session_id),
     blocks: blocks.map((block) => ({
       ...block,
-      exercises: (exercisesOf.all(block.id) as { id: string; position: number; exercise_id: string; note: string | null }[]).map((be) => {
+      exercises: (exercisesOf.all(block.id) as { id: string; position: number; exercise_id: string; note: string | null; planned_item_id: string | null }[]).map((be) => {
         const exercise = getExercise(db, userId, be.exercise_id);
         return {
           id: be.id,
@@ -176,6 +186,7 @@ export function getSession(db: Db, userId: string, id: string): SessionTree {
           note: be.note,
           sets: setsOf(db, be.id),
           last_time: lastTime(db, userId, be.exercise_id, session),
+          planned: plannedOfBlockExercise(ctx, be.planned_item_id, be.id, session.started_at.slice(0, 10)),
         };
       }),
     })),

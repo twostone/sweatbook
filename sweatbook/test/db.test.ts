@@ -65,7 +65,7 @@ test("migration v3: the three old kinds become field flags, sets keep their valu
     INSERT INTO block_exercise (id, block_id, exercise_id, position) VALUES ('be', 'b', 'wr', 0);
     INSERT INTO set_log (id, block_exercise_id, position, weight_kg, reps, logged_at) VALUES ('l', 'be', 0, 100, 5, 'x');
   `);
-  migrate(db);
+  migrate(db, MIGRATIONS.slice(0, 3));
   assert.equal(schemaVersion(db), 3);
   const flags = db.prepare("SELECT id, has_weight, has_reps, has_distance, has_duration FROM exercise ORDER BY id").all().map((r) => ({ ...r }));
   assert.deepEqual(flags, [
@@ -76,4 +76,21 @@ test("migration v3: the three old kinds become field flags, sets keep their valu
   const columns = (db.prepare("PRAGMA table_info(exercise)").all() as { name: string }[]).map((c) => c.name);
   assert.ok(!columns.includes("metrics"));
   assert.deepEqual({ ...db.prepare("SELECT weight_kg, reps, distance_m FROM set_log").get() }, { weight_kg: 100, reps: 5, distance_m: null });
+});
+
+test("migration v4: existing data stays, sessions and block exercises get no plan link", () => {
+  const db = new DatabaseSync(":memory:");
+  migrate(db, MIGRATIONS.slice(0, 3));
+  db.exec(`
+    INSERT INTO app_user (id, ha_user_id, created_at) VALUES ('u', 'ha', 'x');
+    INSERT INTO exercise (id, user_id, name, has_weight, has_reps, created_at) VALUES ('e', 'u', 'A', 1, 1, 'x');
+    INSERT INTO session (id, user_id, started_at, created_at) VALUES ('s', 'u', 'x', 'x');
+    INSERT INTO block (id, session_id, position, type) VALUES ('b', 's', 0, 'straight');
+    INSERT INTO block_exercise (id, block_id, exercise_id, position) VALUES ('be', 'b', 'e', 0);
+  `);
+  migrate(db);
+  assert.equal(schemaVersion(db), 4);
+  assert.deepEqual({ ...db.prepare("SELECT planned_session_id FROM session").get() }, { planned_session_id: null });
+  assert.deepEqual({ ...db.prepare("SELECT planned_item_id FROM block_exercise").get() }, { planned_item_id: null });
+  assert.deepEqual({ ...db.prepare("SELECT COUNT(*) AS n FROM program").get() }, { n: 0 });
 });

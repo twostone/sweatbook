@@ -17,13 +17,25 @@ function ownedBlock(db: Db, userId: string, blockId: string): BlockRow {
   return row;
 }
 
-function insertBlockExercise(db: Db, blockId: string, exerciseId: string): void {
-  db.prepare("INSERT INTO block_exercise (id, block_id, exercise_id, position) VALUES (?, ?, ?, ?)").run(
+function insertBlockExercise(db: Db, blockId: string, exerciseId: string, plannedItemId: string | null = null): void {
+  db.prepare("INSERT INTO block_exercise (id, block_id, exercise_id, position, planned_item_id) VALUES (?, ?, ?, ?, ?)").run(
     newId(),
     blockId,
     exerciseId,
     nextPosition(db, "block_exercise", "block_id", blockId),
+    plannedItemId,
   );
+}
+
+// A new block with one exercise at the end of the session, inside a transaction of the caller.
+export function insertBlock(db: Db, sessionId: string, exerciseId: string, plannedItemId: string | null = null): void {
+  const blockId = newId();
+  db.prepare("INSERT INTO block (id, session_id, position, type, params) VALUES (?, ?, ?, 'straight', NULL)").run(
+    blockId,
+    sessionId,
+    nextPosition(db, "block", "session_id", sessionId),
+  );
+  insertBlockExercise(db, blockId, exerciseId, plannedItemId);
 }
 
 // A new block with one exercise, appended at the end of the session.
@@ -31,13 +43,7 @@ export function addBlock(db: Db, userId: string, sessionId: string, exerciseId: 
   transaction(db, () => {
     assertSessionOwned(db, userId, sessionId);
     assertUsable(getExercise(db, userId, exerciseId));
-    const blockId = newId();
-    db.prepare("INSERT INTO block (id, session_id, position, type, params) VALUES (?, ?, ?, 'straight', NULL)").run(
-      blockId,
-      sessionId,
-      nextPosition(db, "block", "session_id", sessionId),
-    );
-    insertBlockExercise(db, blockId, exerciseId);
+    insertBlock(db, sessionId, exerciseId);
   });
   return getSession(db, userId, sessionId);
 }

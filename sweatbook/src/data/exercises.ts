@@ -191,7 +191,9 @@ export function updateExercise(db: Db, userId: string, id: string, patch: Exerci
 // Exercises are never deleted while sets point at them (ON DELETE RESTRICT): archive instead. An unused one may go.
 export function deleteExercise(db: Db, userId: string, id: string): void {
   getExercise(db, userId, id);
-  const used = db.prepare("SELECT 1 AS x FROM block_exercise WHERE exercise_id = ? LIMIT 1").get(id);
+  const used =
+    db.prepare("SELECT 1 AS x FROM block_exercise WHERE exercise_id = ? LIMIT 1").get(id) ??
+    db.prepare("SELECT 1 AS x FROM planned_item WHERE exercise_id = ? OR load_ref_exercise_id = ? LIMIT 1").get(id, id);
   if (used) throw new ConflictError("exercise in use");
   db.prepare("DELETE FROM exercise WHERE id = ?").run(id);
 }

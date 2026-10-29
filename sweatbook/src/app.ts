@@ -5,6 +5,26 @@ import * as z from "zod";
 import type { Db } from "./db.ts";
 import { addBlock, addExerciseToBlock, addRound, deleteBlock, removeBlockExercise, setBlockOrder, updateBlockExercise } from "./data/blocks.ts";
 import { ConflictError, InvalidError, NotFoundError } from "./data/common.ts";
+import {
+  addPlanItem,
+  addPlannedSession,
+  addWeek,
+  createProgram,
+  deletePlanItem,
+  deletePlannedSession,
+  deleteProgram,
+  deleteWeek,
+  getProgram,
+  listPrograms,
+  setItemOrder,
+  startPlannedSession,
+  updatePlanItem,
+  updatePlannedSession,
+  updateProgram,
+  updateWeek,
+  type PlanItemInput,
+} from "./data/programs.ts";
+import { createTest, deleteTest, listTests } from "./data/tests.ts";
 import { createExercise, deleteExercise, FIELDS, getExercise, listExercises, updateExercise } from "./data/exercises.ts";
 import { createSession, deleteSession, exerciseHistory, getSession, listSessions, updateSession } from "./data/sessions.ts";
 import { addSets, deleteSet, updateSet } from "./data/sets.ts";
@@ -65,6 +85,67 @@ const sessionPatch = z.object({
 const page = z.object({ before: isoTime.optional(), limit: z.coerce.number().int().min(1).max(100).optional() });
 const exerciseRef = z.object({ exercise_id: id });
 const blockExercisePatch = z.object({ note: optionalText(1000) });
+
+// Plan: a range is [min, max] (a fixed number is [n, n]). Which targets an exercise may have is checked in data/programs.ts.
+const MAX_TARGET = 100_000;
+const target = z.number().int().min(0).max(MAX_TARGET);
+const range = z
+  .tuple([target, target])
+  .refine(([min, max]) => min <= max, "min must not exceed max")
+  .nullable()
+  .optional();
+const MAX_LOAD_PCT = 500;
+const planItemFields = {
+  exercise_id: id.nullable().optional(),
+  label: optionalText(80),
+  sets: range,
+  reps: range,
+  distance_m: range,
+  duration_s: range,
+  to_max: z.boolean().optional(),
+  load_kg: z.number().min(0).max(1000).nullable().optional(),
+  load_pct: z.number().gt(0).max(MAX_LOAD_PCT).nullable().optional(),
+  load_ref_exercise_id: id.nullable().optional(),
+  test_kind: z.enum(["one_rm", "best"]).nullable().optional(),
+  rest: optionalText(200),
+  note: optionalText(1000),
+};
+const planItemPatch = z.object(planItemFields);
+const planItemBody = planItemPatch.transform(
+  (v): PlanItemInput => ({
+    exercise_id: v.exercise_id ?? null,
+    label: v.label ?? null,
+    sets: v.sets ?? null,
+    reps: v.reps ?? null,
+    distance_m: v.distance_m ?? null,
+    duration_s: v.duration_s ?? null,
+    to_max: v.to_max ?? false,
+    load_kg: v.load_kg ?? null,
+    load_pct: v.load_pct ?? null,
+    load_ref_exercise_id: v.load_ref_exercise_id ?? null,
+    test_kind: v.test_kind ?? null,
+    rest: v.rest ?? null,
+    note: v.note ?? null,
+  }),
+);
+const day = z.iso.date();
+const programBody = z.object({ name, start_date: day });
+const programPatch = z.object({ name: name.optional(), start_date: day.optional(), archived: z.boolean().optional() });
+const phase = optionalText(100);
+const weekBody = z.object({ phase, deload: z.boolean().optional(), copy_of: id.optional() });
+const weekPatch = z.object({ phase, deload: z.boolean().optional() });
+const label = z.string().trim().min(1).max(20);
+const plannedSessionPatch = z.object({ label: label.optional(), skipped: z.boolean().optional(), skip_note: optionalText(100) });
+const MAX_PLAN_ITEMS = 50;
+const testBody = z.object({
+  kind: z.enum(["one_rm", "best"]),
+  tested_on: day.optional(),
+  weight_kg: z.number().min(0).max(1000).nullable().optional(),
+  reps: z.number().int().min(0).max(1000).nullable().optional(),
+  distance_m: z.number().int().min(0).max(MAX_DISTANCE_M).nullable().optional(),
+  duration_s: z.number().int().min(0).max(86400).nullable().optional(),
+  note: optionalText(500),
+});
 
 export type AppOptions = {
   // If set, only connections from this IP are served. HA ingress always connects from 172.30.32.2 (Supervisor);
@@ -184,6 +265,60 @@ export function createApp(db: Db, opts: AppOptions = {}) {
     deleteSet(db, c.get("user").id, c.req.valid("param").id);
     return c.body(null, 204);
   });
+
+  // Test values
+  app.get("/api/exercises/:id/tests", zValidator("param", idParam), (c) => c.json(listTests(db, c.get("user").id, c.req.valid("param").id)));
+  app.post("/api/exercises/:id/tests", zValidator("param", idParam), zValidator("json", testBody), (c) =>
+    c.json(createTest(db, c.get("user").id, c.req.valid("param").id, c.req.valid("json")), 201),
+  );
+  app.delete("/api/tests/:id", zValidator("param", idParam), (c) => {
+    deleteTest(db, c.get("user").id, c.req.valid("param").id);
+    return c.body(null, 204);
+  });
+
+  // Programs: changes answer with the whole program, like sessions do.
+  app.get("/api/programs", (c) => c.json(listPrograms(db, c.get("user").id)));
+  app.post("/api/programs", zValidator("json", programBody), (c) => c.json(createProgram(db, c.get("user").id, c.req.valid("json")), 201));
+  app.get("/api/programs/:id", zValidator("param", idParam), (c) => c.json(getProgram(db, c.get("user").id, c.req.valid("param").id)));
+  app.patch("/api/programs/:id", zValidator("param", idParam), zValidator("json", programPatch), (c) =>
+    c.json(updateProgram(db, c.get("user").id, c.req.valid("param").id, c.req.valid("json"))),
+  );
+  app.delete("/api/programs/:id", zValidator("param", idParam), (c) => {
+    deleteProgram(db, c.get("user").id, c.req.valid("param").id);
+    return c.body(null, 204);
+  });
+  app.post("/api/programs/:id/weeks", zValidator("param", idParam), zValidator("json", weekBody), (c) =>
+    c.json(addWeek(db, c.get("user").id, c.req.valid("param").id, c.req.valid("json")), 201),
+  );
+  app.patch("/api/weeks/:id", zValidator("param", idParam), zValidator("json", weekPatch), (c) =>
+    c.json(updateWeek(db, c.get("user").id, c.req.valid("param").id, c.req.valid("json"))),
+  );
+  app.delete("/api/weeks/:id", zValidator("param", idParam), (c) => c.json(deleteWeek(db, c.get("user").id, c.req.valid("param").id)));
+  app.post("/api/weeks/:id/sessions", zValidator("param", idParam), zValidator("json", z.object({ label })), (c) =>
+    c.json(addPlannedSession(db, c.get("user").id, c.req.valid("param").id, c.req.valid("json").label), 201),
+  );
+  app.patch("/api/planned-sessions/:id", zValidator("param", idParam), zValidator("json", plannedSessionPatch), (c) =>
+    c.json(updatePlannedSession(db, c.get("user").id, c.req.valid("param").id, c.req.valid("json"))),
+  );
+  app.delete("/api/planned-sessions/:id", zValidator("param", idParam), (c) =>
+    c.json(deletePlannedSession(db, c.get("user").id, c.req.valid("param").id)),
+  );
+  app.post("/api/planned-sessions/:id/items", zValidator("param", idParam), zValidator("json", planItemBody), (c) =>
+    c.json(addPlanItem(db, c.get("user").id, c.req.valid("param").id, c.req.valid("json")), 201),
+  );
+  app.put("/api/planned-sessions/:id/item-order", zValidator("param", idParam), zValidator("json", z.object({ item_ids: z.array(id).max(MAX_PLAN_ITEMS) })), (c) =>
+    c.json(setItemOrder(db, c.get("user").id, c.req.valid("param").id, c.req.valid("json").item_ids)),
+  );
+  app.post(
+    "/api/planned-sessions/:id/start",
+    zValidator("param", idParam),
+    zValidator("json", z.object({ started_at: isoTime.optional(), ended_at: isoTime.optional() })),
+    (c) => c.json(startPlannedSession(db, c.get("user").id, c.req.valid("param").id, c.req.valid("json")), 201),
+  );
+  app.patch("/api/planned-items/:id", zValidator("param", idParam), zValidator("json", planItemPatch), (c) =>
+    c.json(updatePlanItem(db, c.get("user").id, c.req.valid("param").id, c.req.valid("json"))),
+  );
+  app.delete("/api/planned-items/:id", zValidator("param", idParam), (c) => c.json(deletePlanItem(db, c.get("user").id, c.req.valid("param").id)));
 
   app.all("/api/*", (c) => c.json({ error: "not found" }, 404));
 

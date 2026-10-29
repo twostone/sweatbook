@@ -84,6 +84,13 @@ export function groupWeeksByPhase(weeks: PlanWeek[], phases: PlanPhase[]): { pha
   return clusters;
 }
 
+// What a collapsed phase shows: its weeks and how many of their planned sessions are done or skipped.
+export function clusterProgress(weeks: PlanWeek[]): string {
+  const sessions = weeks.flatMap((w) => w.sessions);
+  const done = sessions.filter((s) => s.state !== "open").length;
+  return `${weeks.length} ${weeks.length === 1 ? "Woche" : "Wochen"} · ${done} von ${sessions.length} Einheiten`;
+}
+
 // The Monday of a week and its Sunday as "31.8.–6.9.", counted from the program's start date (YYYY-MM-DD).
 export function weekDates(startDate: string, weekNumber: number): string {
   const start = new Date(`${startDate}T12:00:00Z`);

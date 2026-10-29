@@ -29,6 +29,7 @@ sweatbook/               die App (Docker-Build-Kontext)
     log.ts, options.ts     Logger (logfmt) und App-Optionen (wie meal-planner)
   web/                   Frontend: Svelte 5 + Vite (Runes), Hash-Routen in router.svelte.ts, Zustand in store.svelte.ts
     src/logic/             reine Client-Logik ohne DOM (Schnelleingabe, Zeit, Vorbelegung, Weiter-Ziel, Format), getestet
+  examples/              Beispiel-Plandatei für den Import (erfundene Werte)
   test/                  Tests (node:test)
 ```
 
@@ -88,6 +89,10 @@ set_log         Satz: weight_kg (null = Körpergewicht), reps, duration_s, dista
   übersprungen ist (`skipped`); „Nächstes Workout“ ist die erste offene nach Woche und Position. Eine Session aus dem
   Plan (`planned_session_id`) hat je Planzeile mit Übung einen Block (`block_exercise.planned_item_id`) und ist danach
   eine normale Session; Löschen von Plan oder Planzeile löst nur die Verweise.
+- **Import** (`data/import.ts`): Übungen der Datei werden über Namen und Aliase im Katalog gefunden, fehlende mit ihren
+  `fields` angelegt; `start_week` setzt frühere Einheiten auf übersprungen mit „vor der App“. Fehler nennen die Stelle
+  („week 2 A, line 2: …“). Echte Plandateien enthalten Testwerte und kommen nie ins (öffentliche) Repository; dort liegt
+  nur das Beispiel mit erfundenen Werten.
 - **Testwerte aus dem Training:** Hat die Planzeile eines Block-Eintrags `test_kind`, hält `syncSessionTest`
   (`data/tests.ts`) nach jeder Änderung seiner Sätze einen Testwert aktuell (1RM: schwerster Satz; Bestleistung: meiste
   Wdh., dann Strecke, dann Zeit). Er steht in `planned.test` der Session; „Rückgängig“ = `DELETE /api/tests/:id`.
@@ -135,6 +140,7 @@ Gespeichertem). Optionale Textfelder: `""` und `null` löschen, fehlt das Feld, 
 | `POST /api/block-exercises/:id/sets` | 1–20 Sätze (Schnelleingabe „3×5@100“ parst der Client; nur bei Übungen mit genau einem Feld aus Wdh., Strecke, Zeit) |
 | `PATCH`, `DELETE /api/sets/:id` | Satz ändern, löschen |
 | `GET /api/programs` | Programme mit `done`/`total` und `next` (nächste Einheit); aktive zuerst |
+| `POST /api/programs/import` | ganzes Programm aus einer JSON-Datei (`file`, Format wie `examples/programm-beispiel.json`), alles oder nichts; `dry_run: true` prüft und meldet, ohne anzulegen; Antwort `program` + `new_exercises` |
 | `POST /api/programs`, `GET`, `PATCH`, `DELETE /api/programs/:id` | anlegen (`name`, `start_date`); ganzer Baum mit berechneten Gewichten und Tests; Name, Start, `archived`; löschen |
 | `POST /api/programs/:id/weeks`, `PATCH`, `DELETE /api/weeks/:id` | Woche anhängen (`phase`, `deload`, `copy_of` kopiert eine Woche); ändern; löschen |
 | `POST /api/weeks/:id/sessions`, `PATCH`, `DELETE /api/planned-sessions/:id` | Einheit anlegen (`label`); `label`, `skipped` (+ `skip_note`); löschen |
@@ -171,7 +177,7 @@ Actions to create and approve pull requests“.
   (`rsvg-convert -w 128 -h 128 web/public/favicon.svg -o icon.png`). Ein `logo.png` ist optional und bewusst nicht da.
 - **Frontend-URLs immer relativ** (`api/sessions`), nie `/api/...`: Die App läuft unter einem wechselnden Ingress-Präfix.
 - **Navigation:** Seiten über Hash-Routen (alle in `web/src/logic/routes.ts`: Start, `#/history`, `#/s/<id>`,
-  `#/s/<id>/b/<id>`, `#/exercises`, `#/exercises/new`, `#/exercises/<id>`), Sheets belegen einen History-Eintrag ohne URL-Änderung
+  `#/s/<id>/b/<id>`, `#/exercises`, `#/exercises/new`, `#/exercises/<id>`, `#/programs`, `#/programs/import`), Sheets belegen einen History-Eintrag ohne URL-Änderung
   und stehen in `history.state` (Zurück schließt sie, „Übung anlegen“ kehrt in das Sheet zurück). Geschwister (nächster
   Block) per `replace`, „nach oben“ per `goUp`, damit die Zurück-Taste nicht im Kreis läuft.
 - **Funkloch:** Ungesendete Satzzeilen liegen in `localStorage` (`drafts.ts`, `storage.ts`, jeder Zugriff in try/catch),

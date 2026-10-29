@@ -60,3 +60,16 @@ export type SessionTree = Omit<SessionSummary, "block_count" | "set_count"> & { 
 export type HistoryEntry = { session_id: string; title: string | null; started_at: string; sets: SetLog[] };
 
 export type SessionPatch = { title?: string | null; started_at?: string; ended_at?: string | null; note?: string | null };
+
+// Programs (plans). The import answers with the program tree; the list and the preview use only a part of it so far.
+export type ProgramSummary = {
+  id: string;
+  name: string;
+  start_date: string;
+  archived: boolean;
+  done: number; // planned sessions done or skipped
+  total: number;
+  next: { planned_session_id: string; week: number; phase: string | null; label: string } | null;
+};
+export type ProgramTree = ProgramSummary & { weeks: { sessions: { items: unknown[] }[] }[]; tests: unknown[] };
+export type ImportResult = { program: ProgramTree; new_exercises: string[] };

@@ -3,7 +3,9 @@ import type {
   ExerciseInput,
   ExercisePatch,
   HistoryEntry,
+  ImportResult,
   Me,
+  ProgramSummary,
   SessionPatch,
   SessionSummary,
   SessionTree,
@@ -116,3 +118,7 @@ export const addSets = (blockExerciseId: string, sets: SetInput[]) =>
   request<SetLog[]>("POST", `api/block-exercises/${enc(blockExerciseId)}/sets`, { sets });
 export const updateSet = (id: string, s: SetInput) => request<SetLog>("PATCH", `api/sets/${enc(id)}`, s);
 export const deleteSet = (id: string) => request<void>("DELETE", `api/sets/${enc(id)}`);
+
+export const listPrograms = () => request<ProgramSummary[]>("GET", "api/programs");
+// dryRun: the server checks the file and reports what it would create, without creating it.
+export const importProgram = (file: unknown, dryRun: boolean) => request<ImportResult>("POST", "api/programs/import", { file, dry_run: dryRun });

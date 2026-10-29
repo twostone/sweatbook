@@ -1,0 +1,61 @@
+{
+  "program": { "name": "Beispiel-Plan (3 Wochen)", "start_date": "2027-01-04", "start_week": 2 },
+  "exercises": [
+    { "key": "bank", "name": "Bankziehen", "fields": ["weight", "reps"] },
+    { "key": "rudern", "name": "Langhantelrudern vorgebeugt", "fields": ["weight", "reps"] },
+    { "key": "hang", "name": "Dead Hang", "fields": ["weight", "duration"] },
+    { "key": "farmer", "name": "Farmer's Walk", "fields": ["weight", "distance", "duration"] }
+  ],
+  "tests": [
+    { "exercise": "bank", "tested_on": "2027-01-04", "kind": "one_rm", "weight_kg": 100, "reps": 1 },
+    { "exercise": "bank", "tested_on": "2027-01-04", "kind": "best", "weight_kg": 40, "reps": 50, "note": "2 Min" },
+    { "exercise": "hang", "tested_on": "2027-01-04", "kind": "best", "duration_s": 60 }
+  ],
+  "weeks": [
+    {
+      "number": 1,
+      "phase": "Phase 1 – Aufbau",
+      "sessions": [
+        { "label": "A", "items": [{ "exercise": "bank", "sets": [3, 3], "reps": [5, 5], "load": { "percent": 80, "of": "bank" }, "rest": "3 Min" }] },
+        { "label": "B", "items": [{ "exercise": "rudern", "sets": [3, 3], "reps": [8, 8], "load": { "percent": 60, "of": "bank" } }] }
+      ]
+    },
+    {
+      "number": 2,
+      "phase": "Phase 1 – Aufbau",
+      "sessions": [
+        {
+          "label": "A",
+          "items": [
+            { "text": "Aufwärmen: 5 Min Rudergerät" },
+            { "exercise": "bank", "sets": [4, 4], "reps": [3, 5], "load": { "percent": 85, "of": "bank" }, "rest": "3–4 Min", "note": "steigert bis 92 %" },
+            { "exercise": "rudern", "label": "schwer", "sets": [2, 2], "reps": [5, 5], "load": { "percent": 75, "of": "bank" }, "rest": "2–3 Min" }
+          ]
+        },
+        {
+          "label": "B",
+          "items": [
+            { "exercise": "bank", "label": "mit 40 kg — AMRAP", "sets": [5, 5], "max": true, "load": { "kg": 40 }, "rest": "2 Min", "note": "RPE 8" },
+            { "exercise": "hang", "label": "wiederholt", "sets": [5, 6], "duration_s": [20, 30], "rest": "30 Sek" },
+            { "exercise": "farmer", "sets": [3, 3], "distance_m": [60, 60] }
+          ]
+        }
+      ]
+    },
+    {
+      "number": 3,
+      "phase": "Phase 2 – Test",
+      "deload": true,
+      "sessions": [
+        {
+          "label": "A",
+          "items": [
+            { "text": "Ruhe in den letzten 2–3 Tagen vor dem Test" },
+            { "exercise": "bank", "label": "1RM-Test", "test": "one_rm", "sets": [1, 1], "reps": [1, 1], "rest": "3–5 Min" },
+            { "exercise": "hang", "label": "Test", "test": "best", "sets": [1, 1] }
+          ]
+        }
+      ]
+    }
+  ]
+}

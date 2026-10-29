@@ -6,7 +6,9 @@
   import ExerciseView from "./ExerciseView.svelte";
   import HistoryView from "./HistoryView.svelte";
   import LogSessionSheet from "./LogSessionSheet.svelte";
+  import ImportView from "./ImportView.svelte";
   import NewExerciseView from "./NewExerciseView.svelte";
+  import ProgramsView from "./ProgramsView.svelte";
   import SessionSheet from "./SessionSheet.svelte";
   import SessionView from "./SessionView.svelte";
   import StartView from "./StartView.svelte";
@@ -47,6 +49,10 @@
     <HistoryView />
   {:else if route.name === "catalog"}
     <CatalogView />
+  {:else if route.name === "programs"}
+    <ProgramsView />
+  {:else if route.name === "program-import"}
+    <ImportView />
   {:else if route.name === "exercise"}
     {#key route.exerciseId}
       <ExerciseView exerciseId={route.exerciseId} />

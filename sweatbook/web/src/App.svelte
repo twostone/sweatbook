@@ -29,7 +29,7 @@
   });
 </script>
 
-<div class="frame">
+<div class="frame" class:wide={route.name === "program"}>
   {#if app.error && app.sheet.kind === "none"}
     <div class="error" role="alert">
       <span>{app.error}</span>
@@ -100,6 +100,12 @@
     height: 100%;
     display: flex;
     flex-direction: column;
+  }
+  /* The plan grid uses the whole window; ProgramView lets its page grow too. */
+  @media (min-width: 900px) {
+    .frame.wide {
+      max-width: none;
+    }
   }
   .frame > :global(.page) {
     flex: 1;

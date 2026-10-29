@@ -9,6 +9,25 @@
   let programs = $state<ProgramSummary[]>([]);
   let loaded = $state(false);
 
+  // A new empty program: name and the Monday of week 1 (the coming one by default).
+  const nextMonday = () => {
+    const d = new Date();
+    d.setDate(d.getDate() + ((8 - d.getDay()) % 7 || 7));
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  };
+  let creating = $state(false);
+  let newName = $state("");
+  let newStart = $state(nextMonday());
+  let busy = $state(false);
+  async function create() {
+    busy = true;
+    await guard(async () => {
+      const created = await api.createProgram(newName.trim(), newStart);
+      navigate(paths.program(created.id));
+    });
+    busy = false;
+  }
+
   $effect(() => {
     guard(async () => {
       programs = await api.listPrograms();
@@ -45,6 +64,16 @@
   </header>
   <main>
     <h1 class="display page-title">Pläne</h1>
+    {#if creating}
+      <form class="card create" onsubmit={(e) => { e.preventDefault(); create(); }}>
+        <label>Name<input class="field" bind:value={newName} maxlength="100" required /></label>
+        <label>Start (Montag von Woche 1)<input class="field" type="date" bind:value={newStart} required /></label>
+        <div class="pair">
+          <button type="button" class="btn" onclick={() => (creating = false)}>Abbrechen</button>
+          <button type="submit" class="btn strong" disabled={busy || !newName.trim()}>Anlegen</button>
+        </div>
+      </form>
+    {/if}
     {#each active as p (p.id)}
       {@render card(p)}
     {:else}
@@ -58,6 +87,7 @@
     {/if}
   </main>
   <footer>
+    <button type="button" class="btn big grow" onclick={() => (creating = true)}><Icon name="plus" />Neu</button>
     <button type="button" class="btn big primary grow" onclick={() => navigate(paths.programImport())}>
       <Icon name="plus" />Importieren
     </button>
@@ -65,6 +95,25 @@
 </div>
 
 <style>
+  .create {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .create label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-weight: 600;
+    font-size: 14px;
+  }
+  .pair {
+    display: flex;
+    gap: 8px;
+  }
+  .pair .btn {
+    flex: 1;
+  }
   .program {
     display: flex;
     flex-direction: column;

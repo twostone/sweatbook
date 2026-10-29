@@ -12,7 +12,8 @@ export type SheetState =
   | { kind: "add-exercise"; target: AddTarget; query: string }
   | { kind: "session"; sessionId: string }
   | { kind: "block-menu"; sessionId: string; blockId: string }
-  | { kind: "log-session" };
+  | { kind: "log-session" }
+  | { kind: "log-planned"; plannedId: string };
 
 export const app = $state({
   ready: false,
@@ -110,6 +111,16 @@ export const logPastSession = (startedAt: string, title: string) =>
     closeSheetThen(() => navigate(paths.session(created.id)));
   });
 
+// A session from a planned session: one block per plan line. Without times it starts now (and ends an open session);
+// with startedAt it is entered afterwards, done at once, like "Nachtragen" on the start page.
+export const startPlanned = (plannedId: string, startedAt?: string) =>
+  guard(async () => {
+    const tree = await api.startPlannedSession(plannedId, startedAt ? { started_at: startedAt, ended_at: startedAt } : {});
+    setSession(tree);
+    if (startedAt) closeSheetThen(() => navigate(paths.session(tree.id)));
+    else navigate(paths.session(tree.id));
+  });
+
 // Ends the session now (only if it is still open) and goes to the start.
 export const finishSession = (tree: SessionTree) =>
   guard(async () => {
@@ -132,11 +143,32 @@ function replaceSet(blockExerciseId: string, id: string, replacement: SetLog[]) 
   cacheSession();
 }
 
+function blockExercise(blockExerciseId: string) {
+  for (const block of app.session?.blocks ?? []) {
+    for (const be of block.exercises) if (be.id === blockExerciseId) return be;
+  }
+  return null;
+}
+
+// A set on a test line of the plan makes (or moves, or removes) a test value on the server, which the set's own answer
+// does not carry: fetch just that part of the session. The set is saved either way, so a failure here stays silent.
+async function refreshTest(blockExerciseId: string) {
+  const shown = blockExercise(blockExerciseId);
+  if (!shown?.planned?.test_kind || !app.session) return;
+  try {
+    const fresh = (await api.getSession(app.session.id)).blocks.flatMap((b) => b.exercises).find((e) => e.id === blockExerciseId);
+    if (fresh) shown.planned = fresh.planned;
+  } catch {
+    // keep the test shown so far
+  }
+}
+
 // Sets answer with themselves only; they are put into the shown session instead of loading it again.
 export const addSets = (blockExerciseId: string, sets: SetInput[]) =>
   guard(async () => {
     const created = await api.addSets(blockExerciseId, sets);
     exerciseSets(blockExerciseId)?.push(...created);
+    await refreshTest(blockExerciseId);
     cacheSession();
   });
 
@@ -144,12 +176,14 @@ export const updateSet = (blockExerciseId: string, id: string, patch: SetInput) 
   guard(async () => {
     const updated = await api.updateSet(id, patch);
     replaceSet(blockExerciseId, id, [updated]);
+    await refreshTest(blockExerciseId);
   });
 
 export const deleteSet = (blockExerciseId: string, id: string) =>
   guard(async () => {
     await api.deleteSet(id);
     replaceSet(blockExerciseId, id, []);
+    await refreshTest(blockExerciseId);
   });
 
 

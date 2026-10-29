@@ -8,6 +8,8 @@ export type Route =
   | { name: "catalog" }
   | { name: "programs" }
   | { name: "program-import" }
+  | { name: "program"; programId: string }
+  | { name: "planned-session"; programId: string; plannedId: string }
   | { name: "exercise"; exerciseId: string }
   // fromSheet: opened from "add exercise", so saving returns there with the new exercise picked
   | { name: "new-exercise"; prefill: string; fromSheet: boolean };
@@ -20,6 +22,8 @@ export const paths = {
   catalog: () => "#/exercises",
   programs: () => "#/programs",
   programImport: () => "#/programs/import",
+  program: (programId: string) => `#/programs/${programId}`,
+  plannedSession: (programId: string, plannedId: string) => `#/programs/${programId}/s/${plannedId}`,
   exercise: (exerciseId: string) => `#/exercises/${exerciseId}`,
   newExercise: (prefill: string, fromSheet = false) =>
     `#/exercises/new?${new URLSearchParams({ name: prefill, ...(fromSheet ? { from: "sheet" } : {}) })}`,
@@ -33,7 +37,11 @@ export function parseRoute(hash: string): Route {
     return { name: "session", sessionId: parts[1] };
   }
   if (parts[0] === "history") return { name: "history" };
-  if (parts[0] === "programs") return parts[1] === "import" ? { name: "program-import" } : { name: "programs" };
+  if (parts[0] === "programs") {
+    if (parts[1] === "import") return { name: "program-import" };
+    if (parts[1] && parts[2] === "s" && parts[3]) return { name: "planned-session", programId: parts[1], plannedId: parts[3] };
+    return parts[1] ? { name: "program", programId: parts[1] } : { name: "programs" };
+  }
   if (parts[0] === "exercises") {
     if (parts[1] === "new") {
       const params = new URLSearchParams(query);

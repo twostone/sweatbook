@@ -43,6 +43,7 @@ export type SessionExercise = {
   note: string | null; // for this session only, unlike the catalog note
   sets: SetLog[];
   last_time: LastTime | null;
+  planned: SessionPlanned | null; // the plan line this exercise came from
 };
 export type SessionBlock = { id: string; position: number; type: "straight" | "superset"; exercises: SessionExercise[] };
 
@@ -55,21 +56,76 @@ export type SessionSummary = {
   block_count: number;
   set_count: number;
 };
-export type SessionTree = Omit<SessionSummary, "block_count" | "set_count"> & { blocks: SessionBlock[] };
+export type SessionTree = Omit<SessionSummary, "block_count" | "set_count"> & { plan: SessionPlan | null; blocks: SessionBlock[] };
 // One session's sets of an exercise, for its history (newest first).
 export type HistoryEntry = { session_id: string; title: string | null; started_at: string; sets: SetLog[] };
 
 export type SessionPatch = { title?: string | null; started_at?: string; ended_at?: string | null; note?: string | null };
 
-// Programs (plans). The import answers with the program tree; the list and the preview use only a part of it so far.
+// Programs (plans): a range is [min, max] (a fixed number is [n, n]).
+export type Range = [number, number];
+export type ExerciseRef = { id: string; name: string; fields: Field[] };
+export type TestKind = "one_rm" | "best";
+
+// One line of a planned session. exercise null = a note line ("Aufwärmen"). weight_kg is computed by the server.
+export type PlanItem = {
+  id: string;
+  position: number;
+  exercise: ExerciseRef | null;
+  label: string | null;
+  sets: Range | null;
+  reps: Range | null;
+  distance_m: Range | null;
+  duration_s: Range | null;
+  to_max: boolean;
+  load_kg: number | null;
+  load_pct: number | null;
+  load_ref: ExerciseRef | null;
+  weight_kg: number | null;
+  test_kind: TestKind | null;
+  rest: string | null;
+  note: string | null;
+};
+
+export type ExerciseTest = {
+  id: string;
+  exercise_id: string;
+  tested_on: string; // YYYY-MM-DD
+  kind: TestKind;
+  weight_kg: number | null;
+  reps: number | null;
+  distance_m: number | null;
+  duration_s: number | null;
+  set_id: string | null; // taken from a training set
+  note: string | null;
+};
+export type TestInput = Partial<SetValues> & { kind: TestKind; tested_on?: string; note?: string | null };
+
+export type PlannedState = "done" | "skipped" | "open";
+export type PlannedSession = {
+  id: string;
+  position: number;
+  label: string;
+  state: PlannedState;
+  skip_note: string | null;
+  session_id: string | null; // the newest session started from it
+  items: PlanItem[];
+};
+export type PlanWeek = { id: string; number: number; phase: string | null; deload: boolean; sessions: PlannedSession[] };
+export type NextWorkout = { planned_session_id: string; week: number; phase: string | null; label: string };
+
 export type ProgramSummary = {
   id: string;
   name: string;
-  start_date: string;
+  start_date: string; // YYYY-MM-DD, the Monday of week 1
   archived: boolean;
   done: number; // planned sessions done or skipped
   total: number;
-  next: { planned_session_id: string; week: number; phase: string | null; label: string } | null;
+  next: NextWorkout | null;
 };
-export type ProgramTree = ProgramSummary & { weeks: { sessions: { items: unknown[] }[] }[]; tests: unknown[] };
+export type ProgramTree = ProgramSummary & { weeks: PlanWeek[]; tests: (ExerciseTest & { exercise_name: string })[] };
 export type ImportResult = { program: ProgramTree; new_exercises: string[] };
+
+// What a session knows of its plan: where it comes from, and per exercise the target.
+export type SessionPlan = { planned_session_id: string; program_id: string; program_name: string; week: number; phase: string | null; label: string; notes: string[] };
+export type SessionPlanned = PlanItem & { test: ExerciseTest | null }; // test: the value this session's sets produced

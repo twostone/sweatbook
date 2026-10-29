@@ -1,5 +1,6 @@
 <script lang="ts">
   import ExerciseForm from "./ExerciseForm.svelte";
+  import ExerciseTests from "./ExerciseTests.svelte";
   import Icon from "./Icon.svelte";
   import * as api from "./api";
   import { formatSessionDate, formatSet } from "./logic/format";
@@ -90,6 +91,10 @@
           ? "Noch nie benutzt: Löschen ist möglich."
           : "Benutzte Übungen werden archiviert statt gelöscht. Archivierte stehen nicht mehr zur Auswahl."}
       </p>
+
+      {#key exercise.id}
+        <ExerciseTests {exercise} />
+      {/key}
 
       <h2 class="label section">Verlauf</h2>
       {#each entries as entry (entry.session_id)}

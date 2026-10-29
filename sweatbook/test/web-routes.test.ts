@@ -10,6 +10,8 @@ test("every path parses back to its route", () => {
   assert.deepEqual(parseRoute(paths.catalog()), { name: "catalog" });
   assert.deepEqual(parseRoute(paths.programs()), { name: "programs" });
   assert.deepEqual(parseRoute(paths.programImport()), { name: "program-import" });
+  assert.deepEqual(parseRoute(paths.program("p1")), { name: "program", programId: "p1" });
+  assert.deepEqual(parseRoute(paths.plannedSession("p1", "x2")), { name: "planned-session", programId: "p1", plannedId: "x2" });
   assert.deepEqual(parseRoute(paths.exercise("e1")), { name: "exercise", exerciseId: "e1" });
   assert.deepEqual(parseRoute(paths.newExercise("Rudern Kabel")), { name: "new-exercise", prefill: "Rudern Kabel", fromSheet: false });
   assert.deepEqual(parseRoute(paths.newExercise("Rudern & Kabel", true)), { name: "new-exercise", prefill: "Rudern & Kabel", fromSheet: true });

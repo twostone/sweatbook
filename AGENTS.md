@@ -19,7 +19,7 @@ release-please-config.json, .release-please-manifest.json   Release-Automatik (V
 renovate.json            Renovate: Actions, npm, Node und Docker-Basisimage (gruppierte PRs)
 sweatbook/               die App (Docker-Build-Kontext)
   config.yaml            App-Konfiguration (Version pflegt Release Please)
-  icon.png               Icon im App-Store (128×128 PNG, aus web/public/favicon.svg erzeugt)
+  icon.png               Icon im App-Store (128×128 PNG, aus web/static/favicon.svg erzeugt)
   translations/          de.yaml, en.yaml: Namen und Beschreibungen der Optionen
   Dockerfile             zweistufig, node:24-alpine
   src/                   Backend: Hono + node:sqlite
@@ -27,7 +27,10 @@ sweatbook/               die App (Docker-Build-Kontext)
     data/                  Datenzugriff, ein Modul pro Entität (users, exercises, sessions, blocks, sets, programs, tests) + plan (Planzeile lesen, Gewicht rechnen) + common
     app.ts, server.ts      API, Ingress-Sperre, Identität, Start
     log.ts, options.ts     Logger (logfmt) und App-Optionen (wie meal-planner)
-  web/                   Frontend: Svelte 5 + Vite (Runes), Hash-Routen in router.svelte.ts, Zustand in store.svelte.ts
+  vite.config.ts         Vite und SvelteKit-Konfiguration (SvelteKit 3: keine svelte.config.js), adapter-static -> dist/
+  web/                   Frontend: SvelteKit (Svelte 5, Runes) als reine SPA mit Hash-Router, Zustand in store.svelte.ts
+    src/routes/            die Seiten (dünne +page.svelte, die die Views aus src/ einsetzen), +layout.svelte (Rahmen, Sheets)
+    static/                favicon.svg, PWA-Manifest und Icons
     src/logic/             reine Client-Logik ohne DOM (Schnelleingabe, Zeit, Vorbelegung, Weiter-Ziel, Format), getestet
   examples/              Beispiel-Plandatei für den Import (erfundene Werte)
   test/                  Tests (node:test)
@@ -172,13 +175,25 @@ Actions to create and approve pull requests“.
 
 ## Regeln beim Ändern
 
-- **App-Icon:** `web/public/favicon.svg` ist die Quelle. `icon.png` (128×128, Dateiname von Home Assistant vorgegeben)
+- **App-Icon:** `web/static/favicon.svg` ist die Quelle. `icon.png` (128×128, Dateiname von Home Assistant vorgegeben)
   ist daraus abgeleitet und wird bei jeder Änderung am SVG neu erzeugt und mit eingecheckt
-  (`rsvg-convert -w 128 -h 128 web/public/favicon.svg -o icon.png`). Ein `logo.png` ist optional und bewusst nicht da.
+  (`rsvg-convert -w 128 -h 128 web/static/favicon.svg -o icon.png`). Ein `logo.png` ist optional und bewusst nicht da.
+  Genauso die PNGs in `web/static/` (`icon-192.png`, `icon-512.png`, `icon-maskable-512.png` und `apple-touch-icon.png`:
+  die letzten beiden aus dem SVG ohne `rx` am Hintergrund, damit sie randlos sind).
+- **PWA:** `web/static/manifest.webmanifest` und die Tags in `app.html` machen die Seite installierbar, aber nur bei
+  direktem Zugang. Im Ingress-iframe von Home Assistant ignoriert der Browser das Manifest, und die Ingress-URL
+  funktioniert nur mit der HA-Sitzung. Bewusst kein Service Worker (Offline = `drafts.ts`, siehe Funkloch).
 - **Frontend-URLs immer relativ** (`api/sessions`), nie `/api/...`: Die App läuft unter einem wechselnden Ingress-Präfix.
-- **Navigation:** Seiten über Hash-Routen (alle in `web/src/logic/routes.ts`: Start, `#/history`, `#/s/<id>`,
+- **SvelteKit:** reine SPA, `router.type: "hash"` (Seiten-Optionen wie `ssr` sind dort wirkungslos), `adapter-static` mit
+  `fallback: "index.html"` nach `dist/`. Der Adapter schreibt dort absolute Pfade (`/_app/…`); `relativeFallback` in
+  `vite.config.ts` macht sie relativ, sonst läuft die App unter dem Ingress-Präfix nicht. Mit dem Hash-Router steckt die
+  Query im Hash: `page.url.hash`, gelesen mit `hashQuery` (`logic/routes.ts`), nicht `page.url.searchParams`. Die Warnung
+  `tsconfig_extends_missing` beim Build betrifft das Backend-`tsconfig.json` und ist gewollt (`web/tsconfig.json` erweitert
+  `$app/tsconfig`). Kein `$lib` (in SvelteKit 3 entfernt), die Views liegen direkt in `web/src/`.
+- **Navigation:** Seiten über Hash-Routen (Dateien unter `web/src/routes/`, die Pfade dazu in `web/src/logic/routes.ts`: Start, `#/history`, `#/s/<id>`,
   `#/s/<id>/b/<id>`, `#/exercises`, `#/exercises/new`, `#/exercises/<id>`, `#/programs`, `#/programs/import`, `#/programs/<id>`, `#/programs/<id>/s/<einheit>`), Sheets belegen einen History-Eintrag ohne URL-Änderung
-  und stehen in `history.state` (Zurück schließt sie, „Übung anlegen“ kehrt in das Sheet zurück). Geschwister (nächster
+  und stehen in `page.state.sheet` (Shallow Routing über `goto(…, { shallow: true, state, persistState: true })`, nie
+  `history.pushState` direkt, das gehört SvelteKit; Zurück schließt sie, „Übung anlegen“ kehrt in das Sheet zurück). Geschwister (nächster
   Block) per `replace`, „nach oben“ per `goUp`, damit die Zurück-Taste nicht im Kreis läuft.
 - **Training aus dem Plan (Client):** Die Übungsseite zeigt `planned` als „Soll“-Kachel und belegt die nächste Satzzeile
   aus dem Plan vor (Gewicht, obere Grenze je Soll; was der Plan offen lässt, folgt der alten Regel in `prefill.ts`),

@@ -1,6 +1,6 @@
 # Sweatbook – Home-Assistant-App
 
-<img src="sweatbook/web/public/favicon.svg" alt="Sweatbook" width="96" align="right">
+<img src="sweatbook/web/static/favicon.svg" alt="Sweatbook" width="96" align="right">
 
 [![CI](https://github.com/twostone/sweatbook/actions/workflows/ci.yml/badge.svg)](https://github.com/twostone/sweatbook/actions/workflows/ci.yml)
 
@@ -45,7 +45,7 @@ npx tsc --noEmit    # Typprüfung Backend
 npm run check       # Svelte-/TypeScript-Prüfung
 npm run build       # Frontend nach dist/
 DB_PATH=./data/dev.db PORT=8099 npm start
-npm run dev:web     # Vite-Dev-Server auf :5173, /api geht per Proxy an :8099
+npm run dev:web     # Vite-Dev-Server (SvelteKit) auf :5173, /api geht per Proxy an :8099
 ```
 
 Ohne Home Assistant fehlt der Nutzer-Header: API-Aufrufe brauchen dann `X-Remote-User-Id` (z. B.

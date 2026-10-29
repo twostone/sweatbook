@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.0](https://github.com/twostone/sweatbook/compare/v1.3.0...v1.4.0) (2026-10-29)
+
+
+### Neu
+
+* **web:** SvelteKit statt eigenem Router und PWA-Manifest ([#23](https://github.com/twostone/sweatbook/issues/23)) ([1702630](https://github.com/twostone/sweatbook/commit/1702630c9c3165cc21c0c3c131212369cdff6e89))
+
 ## [1.3.0](https://github.com/twostone/sweatbook/compare/v1.2.0...v1.3.0) (2026-10-29)
 
 

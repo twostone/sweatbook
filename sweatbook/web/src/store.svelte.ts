@@ -1,3 +1,6 @@
+import { goto } from "$app/navigation";
+import { page } from "$app/state";
+import { untrack } from "svelte";
 import * as api from "./api";
 import { ApiError } from "./api";
 import { goUp, navigate, paths } from "./router.svelte";
@@ -58,7 +61,6 @@ const ME_CACHE = "me";
 
 // Offline the last known user stands in, so a reload in a dead spot still shows the stored session.
 export async function init() {
-  syncSheet();
   try {
     app.me = await api.getMe();
     save(ME_CACHE, app.me);
@@ -189,34 +191,42 @@ export const deleteSet = (blockExerciseId: string, id: string) =>
   });
 
 
-// Sheets: an open sheet owns one history entry (same URL), so "back" (Android button or gesture) closes it instead of
-// leaving the page. The sheet lives in that entry's state: coming back from "Übung anlegen" opens it again as it was.
-const sheetInEntry = () => (history.state as { sheet?: SheetState } | null)?.sheet;
+// Sheets: an open sheet owns one history entry (same URL, SvelteKit's shallow routing), so "back" (Android button or
+// gesture) closes it instead of leaving the page. The sheet lives in that entry's page.state: coming back from
+// "Übung anlegen" opens it again as it was.
+const NO_SHEET: SheetState = { kind: "none" };
+const sheetInEntry = () => page.state.sheet;
 
-function syncSheet() {
-  app.sheet = sheetInEntry() ?? { kind: "none" };
-}
+// back/forward changes page.state; app.sheet follows it. untrack: openSheet sets app.sheet ahead of the navigation,
+// that must not count as a change of the entry.
+$effect.root(() => {
+  $effect(() => {
+    const next = page.state.sheet ?? NO_SHEET;
+    untrack(() => {
+      if (JSON.stringify(next) !== JSON.stringify($state.snapshot(app.sheet))) app.sheet = next;
+    });
+  });
+});
 
-window.addEventListener("popstate", syncSheet);
-window.addEventListener("hashchange", syncSheet);
+const currentHash = () => location.hash || paths.start();
 
 export function openSheet(sheet: SheetState) {
   app.error = "";
-  if (app.sheet.kind === "none") history.pushState({ sheet }, "");
-  else history.replaceState({ sheet }, "");
+  const replacing = app.sheet.kind !== "none";
   app.sheet = sheet;
+  void goto(currentHash(), { shallow: true, replace: replacing, persistState: true, state: { sheet: $state.snapshot(sheet) } });
 }
 
 // Keeps the sheet's entry up to date (e.g. the search text), so returning to it restores it.
 export function rememberSheet(sheet: SheetState) {
-  history.replaceState({ sheet: $state.snapshot(sheet) }, "");
+  void goto(currentHash(), { shallow: true, replace: true, persistState: true, state: { sheet: $state.snapshot(sheet) } });
 }
 
 // Closes the sheet, then moves on once its history entry is gone (a navigation right away would race the
 // history.back() and be undone by it).
 export function closeSheetThen(next: () => void) {
   if (!sheetInEntry()) {
-    app.sheet = { kind: "none" };
+    app.sheet = NO_SHEET;
     next();
     return;
   }
@@ -226,6 +236,6 @@ export function closeSheetThen(next: () => void) {
 
 export function closeSheet() {
   if (app.sheet.kind === "none") return;
-  app.sheet = { kind: "none" };
+  app.sheet = NO_SHEET;
   if (sheetInEntry()) history.back();
 }

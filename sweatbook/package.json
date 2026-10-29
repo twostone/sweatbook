@@ -12,7 +12,7 @@
     "typecheck": "tsc --noEmit",
     "build": "vite build",
     "dev:web": "vite",
-    "check": "svelte-check --tsconfig ./web/tsconfig.json"
+    "check": "svelte-kit sync && svelte-check --tsconfig ./web/tsconfig.json"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.1",
@@ -24,6 +24,8 @@
   "devDependencies": {
     "@fontsource/barlow": "^5.3.0",
     "@fontsource/barlow-condensed": "^5.3.0",
+    "@sveltejs/adapter-static": "^4.0.0",
+    "@sveltejs/kit": "^3.1.0",
     "@sveltejs/vite-plugin-svelte": "^7.3.1",
     "@types/node": "^24.0.0",
     "svelte": "^5.57.1",

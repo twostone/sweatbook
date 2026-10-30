@@ -1,7 +1,7 @@
 <script lang="ts">
+  import TopBar from "./TopBar.svelte";
   import ExerciseForm from "./ExerciseForm.svelte";
   import ExerciseTests from "./ExerciseTests.svelte";
-  import Icon from "./Icon.svelte";
   import * as api from "./api";
   import { formatSessionDate, formatSet } from "./logic/format";
   import { goUp, navigate, paths, replace } from "./router.svelte";
@@ -53,10 +53,7 @@
 </script>
 
 <div class="page">
-  <header class="topbar">
-    <button type="button" class="icon-btn" aria-label="Zum Katalog" onclick={() => goUp(paths.catalog())}><Icon name="back" /></button>
-    <span class="label">Übungskatalog</span>
-  </header>
+  <TopBar label="Übungskatalog" backLabel="Zum Katalog" onback={() => goUp(paths.catalog())} />
   <main>
     {#if exercise}
       <h1 class="display page-title">{exercise.name}</h1>

@@ -8,6 +8,7 @@ test("paths are hash routes", () => {
   assert.equal(paths.block("s1", "b1"), "#/s/s1/b/b1");
   assert.equal(paths.history(), "#/history");
   assert.equal(paths.catalog(), "#/exercises");
+  assert.equal(paths.profile(), "#/profile");
   assert.equal(paths.programs(), "#/programs");
   assert.equal(paths.programImport(), "#/programs/import");
   assert.equal(paths.program("p1"), "#/programs/p1");

@@ -32,6 +32,7 @@ sweatbook/               die App (Docker-Build-Kontext)
     log.ts, options.ts     Logger (logfmt) und App-Optionen (wie meal-planner)
   vite.config.ts         Vite und SvelteKit-Konfiguration (SvelteKit 3: keine svelte.config.js), adapter-static -> dist/
   web/                   Frontend: SvelteKit (Svelte 5, Runes) als reine SPA mit Hash-Router, Zustand in store.svelte.ts
+    src/TopBar.svelte      Kopfzeile aller Seiten unter dem Start (Zurück, Label, Aktionen) mit ProfileLink; Start und Session haben eigene Köpfe, beide mit ProfileLink
     src/routes/            die Seiten (dünne +page.svelte, die die Views aus src/ einsetzen), +layout.svelte (Rahmen, Sheets)
     static/                favicon.svg, PWA-Manifest und Icons
     src/logic/             reine Client-Logik ohne DOM (Schnelleingabe, Zeit, Vorbelegung, Weiter-Ziel, Format), getestet
@@ -70,7 +71,7 @@ program_week    Woche (Mikrozyklus): number, phase_id (-> program_phase, null = 
 planned_session geplante Einheit einer Woche („A“, „B“)
 planned_item    Planzeile: Übung oder Hinweiszeile (ohne Übung), label (Variante), Soll als Spannen (Sätze, Wdh., Strecke, Zeit), to_max, Last fest oder % einer Bezugsübung, test_kind, rest, note
 exercise_test   Testwert eines Nutzers zu einer Übung (1RM oder Bestleistung), Werte wie ein Satz; set_id, wenn aus einem Trainingssatz (geht mit ihm)
-api_token       Zugriffstoken für /mcp: user_id, name, token_hash (SHA-256, nie der Klartext), scope read|write, last_used_at
+api_token       Access Token für /mcp: user_id, name, token_hash (SHA-256, nie der Klartext), scope read|write, last_used_at
 set_log         Satz: weight_kg (null = Körpergewicht), reps, duration_s, distance_m, is_max, note, extra (später), logged_at
 ```
 
@@ -169,7 +170,7 @@ Gespeichertem). Optionale Textfelder: `""` und `null` löschen, fehlt das Feld, 
 **MCP** (`POST /mcp`, nur mit `mcp_enabled`, sonst 404): Streamable HTTP, zustandslos (`src/mcp.ts`, Tools rufen `data/*` direkt auf).
 `Authorization: Bearer sb_…` wird gegen `api_token` geprüft; das Token handelt als sein Besitzer (dieselben Regeln wie in der
 UI). Ein `read`-Token bekommt nur Lese-Tools. Tokens verwaltet man über `GET/POST /api/tokens`, `DELETE /api/tokens/:id`
-(nur Ingress), Klartext nur in der Antwort auf `POST`.
+(nur Ingress), Klartext nur in der Antwort auf `POST`. Oberfläche: Profil (`#/profile`, Icon rechts in jedem Header) mit Name und Abschnitt "Access Token"; die Anleitung dort ist agentenneutral (Adresse, Header, JSON-Beispiel, Claude Code nur als eines).
 - **Eigene Schemas für Modelle** (`mcp-schemas.ts`): jedes Eingabefeld mit Beschreibung und Einheit, **Übungen per Name, Alias oder
   ID** (`resolveExercise` in `data/exercises.ts`: nie raten, nie anlegen, Fehler nennt ähnliche Namen), Sätze mit `count`. Eingaben
   werden normalisiert und dann gegen die API-Schemas (`schemas.ts`) geprüft, damit Grenzen nur dort stehen.
@@ -224,7 +225,7 @@ Actions to create and approve pull requests“.
   `tsconfig_extends_missing` beim Build betrifft das Backend-`tsconfig.json` und ist gewollt (`web/tsconfig.json` erweitert
   `$app/tsconfig`). Kein `$lib` (in SvelteKit 3 entfernt), die Views liegen direkt in `web/src/`.
 - **Navigation:** Seiten über Hash-Routen (Dateien unter `web/src/routes/`, die Pfade dazu in `web/src/logic/routes.ts`: Start, `#/history`, `#/s/<id>`,
-  `#/s/<id>/b/<id>`, `#/exercises`, `#/exercises/new`, `#/exercises/<id>`, `#/programs`, `#/programs/import`, `#/programs/<id>`, `#/programs/<id>/s/<einheit>`), Sheets belegen einen History-Eintrag ohne URL-Änderung
+  `#/s/<id>/b/<id>`, `#/exercises`, `#/exercises/new`, `#/exercises/<id>`, `#/profile`, `#/programs`, `#/programs/import`, `#/programs/<id>`, `#/programs/<id>/s/<einheit>`), Sheets belegen einen History-Eintrag ohne URL-Änderung
   und stehen in `page.state.sheet` (Shallow Routing über `goto(…, { shallow: true, state, persistState: true })`, nie
   `history.pushState` direkt, das gehört SvelteKit; Zurück schließt sie, „Übung anlegen“ kehrt in das Sheet zurück). Geschwister (nächster
   Block) per `replace`, „nach oben“ per `goUp`, damit die Zurück-Taste nicht im Kreis läuft.

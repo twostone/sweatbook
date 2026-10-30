@@ -4,6 +4,6 @@ configuration:
     description: Wie viel die App in ihr Protokoll schreibt.
   mcp_enabled:
     name: MCP-Server
-    description: Schaltet den MCP-Endpunkt /mcp ein, über den Claude mit einem Zugriffstoken auf das Training zugreift. Zugriffstoken legst du in der App unter „Zugriff“ an. Danach unter Netzwerk einen Host-Port für 8099 vergeben.
+    description: Schaltet den MCP-Endpunkt /mcp ein, über den ein MCP-fähiger Agent mit einem Access Token auf das Training zugreift. Access Token legst du in der App im Profil (Icon oben rechts) an. Danach unter Netzwerk einen Host-Port für 8099 vergeben.
 network:
-  8099/tcp: MCP-Endpunkt (/mcp), nur mit Zugriffstoken
+  8099/tcp: MCP-Endpunkt (/mcp), nur mit Access Token

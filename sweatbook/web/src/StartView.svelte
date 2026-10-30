@@ -1,4 +1,5 @@
 <script lang="ts">
+  import ProfileLink from "./ProfileLink.svelte";
   import Icon from "./Icon.svelte";
   import SessionRow from "./SessionRow.svelte";
   import { formatSessionDate } from "./logic/format";
@@ -35,8 +36,11 @@
 
 <div class="page">
   <header class="head">
-    <h1 class="display">Sweatbook</h1>
-    {#if app.me?.display_name}<p class="muted">Hallo {app.me.display_name}</p>{/if}
+    <div class="titles">
+      <h1 class="display">Sweatbook</h1>
+      {#if app.me?.display_name}<p class="muted">Hallo {app.me.display_name}</p>{/if}
+    </div>
+    <ProfileLink />
   </header>
 
   <main>
@@ -93,7 +97,6 @@
       <p class="empty">Noch keine Sessions.</p>
     {/if}
     <button type="button" class="link-btn log" onclick={() => openSheet({ kind: "log-session" })}>Training nachtragen</button>
-    <button type="button" class="link-btn log" onclick={() => navigate(paths.access())}>Zugriff für Claude</button>
   </main>
 
   <footer>
@@ -107,7 +110,14 @@
 
 <style>
   .head {
-    padding: 24px 16px 12px;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 24px 8px 12px 16px;
+  }
+  .titles {
+    flex: 1;
+    min-width: 0;
   }
   h1 {
     font-size: 44px;

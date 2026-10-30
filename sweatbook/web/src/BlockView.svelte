@@ -1,4 +1,5 @@
 <script lang="ts">
+  import TopBar from "./TopBar.svelte";
   import ExerciseNote from "./ExerciseNote.svelte";
   import ExerciseSets from "./ExerciseSets.svelte";
   import Icon from "./Icon.svelte";
@@ -53,16 +54,16 @@
 
 {#if block}
   <div class="page">
-    <header class="topbar">
-      <button type="button" class="icon-btn" aria-label="Zur Übersicht" onclick={() => goUp(paths.session(session.id))}><Icon name="back" /></button>
-      <span class="label grow">Block {index + 1} von {session.blocks.length}</span>
-      <button
-        type="button"
-        class="icon-btn"
-        aria-label="Optionen für {blockLabel(block)}"
-        onclick={() => openSheet({ kind: "block-menu", sessionId: session.id, blockId: block.id })}><Icon name="more" /></button
-      >
-    </header>
+    <TopBar label="Block {index + 1} von {session.blocks.length}" backLabel="Zur Übersicht" onback={() => goUp(paths.session(session.id))}>
+      {#snippet actions()}
+        <button
+          type="button"
+          class="icon-btn"
+          aria-label="Optionen für {blockLabel(block)}"
+          onclick={() => openSheet({ kind: "block-menu", sessionId: session.id, blockId: block.id })}><Icon name="more" /></button
+        >
+      {/snippet}
+    </TopBar>
 
     <main>
       {#if superset}
@@ -111,9 +112,7 @@
   </div>
 {:else}
   <div class="page">
-    <header class="topbar">
-      <button type="button" class="icon-btn" aria-label="Zur Übersicht" onclick={() => goUp(paths.session(session.id))}><Icon name="back" /></button>
-    </header>
+    <TopBar backLabel="Zur Übersicht" onback={() => goUp(paths.session(session.id))} />
     <p class="empty">Diesen Block gibt es nicht mehr.</p>
   </div>
 {/if}

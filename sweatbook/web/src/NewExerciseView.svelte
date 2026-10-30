@@ -1,6 +1,6 @@
 <script lang="ts">
+  import TopBar from "./TopBar.svelte";
   import ExerciseForm from "./ExerciseForm.svelte";
-  import Icon from "./Icon.svelte";
   import * as api from "./api";
   import { goUp, paths, replace } from "./router.svelte";
   import { app } from "./store.svelte";
@@ -29,10 +29,7 @@
 </script>
 
 <div class="page">
-  <header class="topbar">
-    <button type="button" class="icon-btn" aria-label="Zurück" onclick={leave}><Icon name="back" /></button>
-    <span class="label">Übungskatalog</span>
-  </header>
+  <TopBar label="Übungskatalog" backLabel="Zurück" onback={leave} />
   <main>
     <h1 class="display page-title">Übung anlegen</h1>
     {#if fromSheet}<p class="muted intro">Danach geht es zurück zur Auswahl.</p>{/if}

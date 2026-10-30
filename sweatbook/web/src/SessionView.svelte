@@ -1,4 +1,5 @@
 <script lang="ts">
+  import ProfileLink from "./ProfileLink.svelte";
   import Icon from "./Icon.svelte";
   import * as api from "./api";
   import { blockLabel, formatSessionDate } from "./logic/format";
@@ -45,6 +46,7 @@
     {#if session.ended_at === null}
       <button type="button" class="btn pill" onclick={() => finishSession(session)}>Fertig</button>
     {/if}
+    <ProfileLink />
   </header>
 
   {#if session.blocks.length}

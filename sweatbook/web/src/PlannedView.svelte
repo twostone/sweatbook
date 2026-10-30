@@ -1,4 +1,5 @@
 <script lang="ts">
+  import TopBar from "./TopBar.svelte";
   import Icon from "./Icon.svelte";
   import PlanEditor from "./PlanEditor.svelte";
   import Sheet from "./Sheet.svelte";
@@ -49,10 +50,7 @@
 </script>
 
 <div class="page">
-  <header class="topbar">
-    <button type="button" class="icon-btn" aria-label="Zurück" onclick={() => goBack(paths.program(programId))}><Icon name="back" /></button>
-    <span class="label">{program?.name ?? "Plan"}</span>
-  </header>
+  <TopBar label={program?.name ?? "Plan"} backLabel="Zurück" onback={() => goBack(paths.program(programId))} />
   {#if program && found}
     {@const { week, session } = found}
     <main>

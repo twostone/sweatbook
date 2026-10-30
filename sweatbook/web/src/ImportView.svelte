@@ -1,4 +1,5 @@
 <script lang="ts">
+  import TopBar from "./TopBar.svelte";
   import Icon from "./Icon.svelte";
   import * as api from "./api";
   import { countImport, importErrorText, parseImportFile } from "./logic/import-file";
@@ -53,10 +54,7 @@
 </script>
 
 <div class="page">
-  <header class="topbar">
-    <button type="button" class="icon-btn" aria-label="Zurück zu den Plänen" onclick={() => goUp(paths.programs())}><Icon name="back" /></button>
-    <span class="label">Pläne</span>
-  </header>
+  <TopBar label="Pläne" backLabel="Zurück zu den Plänen" onback={() => goUp(paths.programs())} />
   <main>
     <h1 class="display page-title">Plan importieren</h1>
     <label class="label" for="plan-file">Plandatei (JSON)</label>

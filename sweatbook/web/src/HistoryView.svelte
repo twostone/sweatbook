@@ -1,5 +1,5 @@
 <script lang="ts">
-  import Icon from "./Icon.svelte";
+  import TopBar from "./TopBar.svelte";
   import SessionRow from "./SessionRow.svelte";
   import * as api from "./api";
   import { goUp, paths } from "./router.svelte";
@@ -31,10 +31,7 @@
 </script>
 
 <div class="page">
-  <header class="topbar">
-    <button type="button" class="icon-btn" aria-label="Zum Start" onclick={() => goUp(paths.start())}><Icon name="back" /></button>
-    <span class="label">Start</span>
-  </header>
+  <TopBar label="Start" backLabel="Zum Start" onback={() => goUp(paths.start())} />
   <main>
     <h1 class="display page-title">Verlauf</h1>
     {#each sessions as s (s.id)}

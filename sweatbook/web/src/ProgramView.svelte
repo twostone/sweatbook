@@ -1,4 +1,5 @@
 <script lang="ts">
+  import TopBar from "./TopBar.svelte";
   import Icon from "./Icon.svelte";
   import PlanEditor from "./PlanEditor.svelte";
   import * as api from "./api";
@@ -61,13 +62,13 @@
 {/snippet}
 
 <div class="page" class:wide>
-  <header class="topbar">
-    <button type="button" class="icon-btn" aria-label="Zu den Plänen" onclick={() => goUp(paths.programs())}><Icon name="back" /></button>
-    <span class="label grow">Pläne</span>
-    {#if wide && program}
-      <button type="button" class="btn" onclick={() => (selected = { kind: "program" })}><Icon name="pencil" />Programm</button>
-    {/if}
-  </header>
+  <TopBar label="Pläne" backLabel="Zu den Plänen" onback={() => goUp(paths.programs())}>
+    {#snippet actions()}
+      {#if wide && program}
+        <button type="button" class="btn" onclick={() => (selected = { kind: "program" })}><Icon name="pencil" />Programm</button>
+      {/if}
+    {/snippet}
+  </TopBar>
   {#if program && wide}
     <div class="split">
       <main class="plan">

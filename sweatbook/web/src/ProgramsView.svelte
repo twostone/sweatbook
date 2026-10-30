@@ -1,4 +1,5 @@
 <script lang="ts">
+  import TopBar from "./TopBar.svelte";
   import Icon from "./Icon.svelte";
   import * as api from "./api";
   import { goUp, navigate, paths } from "./router.svelte";
@@ -70,10 +71,7 @@
 {/snippet}
 
 <div class="page">
-  <header class="topbar">
-    <button type="button" class="icon-btn" aria-label="Zum Start" onclick={() => goUp(paths.start())}><Icon name="back" /></button>
-    <span class="label">Start</span>
-  </header>
+  <TopBar label="Start" backLabel="Zum Start" onback={() => goUp(paths.start())} />
   <main>
     <h1 class="display page-title">Pläne</h1>
     {#if creating}

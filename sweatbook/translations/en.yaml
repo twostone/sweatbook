@@ -2,3 +2,8 @@ configuration:
   log_level:
     name: Log level
     description: How much the app writes to its log.
+  mcp_enabled:
+    name: MCP server
+    description: Turns on the MCP endpoint /mcp, through which Claude reaches your training with an access token. Create tokens in the app under "Access". Then set a host port for 8099 under Network.
+network:
+  8099/tcp: MCP endpoint (/mcp), access token required

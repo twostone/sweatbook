@@ -193,6 +193,12 @@ export function getSession(db: Db, userId: string, id: string): SessionTree {
   };
 }
 
+// The session still running, if any (there is at most one).
+export function findOpenSession(db: Db, userId: string): SessionTree | null {
+  const row = db.prepare("SELECT id FROM session WHERE user_id = ? AND ended_at IS NULL ORDER BY started_at DESC LIMIT 1").get(userId) as { id: string } | undefined;
+  return row ? getSession(db, userId, row.id) : null;
+}
+
 export type HistoryEntry = { session_id: string; title: string | null; started_at: string; sets: SetLog[] };
 
 // Every session with sets of this exercise, newest first; `before` (a started_at) pages further back.

@@ -17,7 +17,13 @@ panel_title: Sweatbook
 # Every HA user gets their own training data (keyed by the ingress user), so the panel is not admin-only.
 panel_admin: false
 # Options land in /data/options.json (written by the Supervisor); a change needs a restart.
+# Port 8099 is the app itself; it is only opened on the host when the user sets a host port (null = closed).
+# /api stays reachable through ingress only; /mcp (when mcp_enabled) is reachable with an access token.
+ports:
+  8099/tcp: null
 options:
   log_level: info
+  mcp_enabled: false
 schema:
   log_level: list(debug|info|warning|error)
+  mcp_enabled: bool

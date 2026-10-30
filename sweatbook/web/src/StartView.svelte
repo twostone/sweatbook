@@ -93,6 +93,7 @@
       <p class="empty">Noch keine Sessions.</p>
     {/if}
     <button type="button" class="link-btn log" onclick={() => openSheet({ kind: "log-session" })}>Training nachtragen</button>
+    <button type="button" class="link-btn log" onclick={() => navigate(paths.access())}>Zugriff für Claude</button>
   </main>
 
   <footer>

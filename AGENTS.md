@@ -24,8 +24,11 @@ sweatbook/               die App (Docker-Build-Kontext)
   Dockerfile             zweistufig, node:24-alpine
   src/                   Backend: Hono + node:sqlite
     db.ts                  Verbindung, Migrationen, Transaktionen
-    data/                  Datenzugriff, ein Modul pro Entität (users, exercises, sessions, blocks, sets, programs, tests) + plan (Planzeile lesen, Gewicht rechnen) + common
+    data/                  Datenzugriff, ein Modul pro Entität (users, exercises, sessions, blocks, sets, programs, tests, tokens) + plan (Planzeile lesen, Gewicht rechnen) + stats (Auswertungen) + log (Sätze per Übungsname eintragen) + common
     app.ts, server.ts      API, Ingress-Sperre, Identität, Start
+    schemas.ts             zod-Schemas der Anfragen (von API und MCP geteilt)
+    mcp.ts, mcp-http.ts    MCP-Server (Tools, Ressource, Prompts über data/*) und der Endpunkt /mcp mit Token-Prüfung
+    mcp-schemas.ts        eigene Ein- und Ausgabe-Schemas der Tools (beschrieben, Übungen per Name); mcp-views.ts: kompakte Sichten und Texte
     log.ts, options.ts     Logger (logfmt) und App-Optionen (wie meal-planner)
   vite.config.ts         Vite und SvelteKit-Konfiguration (SvelteKit 3: keine svelte.config.js), adapter-static -> dist/
   web/                   Frontend: SvelteKit (Svelte 5, Runes) als reine SPA mit Hash-Router, Zustand in store.svelte.ts
@@ -67,6 +70,7 @@ program_week    Woche (Mikrozyklus): number, phase_id (-> program_phase, null = 
 planned_session geplante Einheit einer Woche („A“, „B“)
 planned_item    Planzeile: Übung oder Hinweiszeile (ohne Übung), label (Variante), Soll als Spannen (Sätze, Wdh., Strecke, Zeit), to_max, Last fest oder % einer Bezugsübung, test_kind, rest, note
 exercise_test   Testwert eines Nutzers zu einer Übung (1RM oder Bestleistung), Werte wie ein Satz; set_id, wenn aus einem Trainingssatz (geht mit ihm)
+api_token       Zugriffstoken für /mcp: user_id, name, token_hash (SHA-256, nie der Klartext), scope read|write, last_used_at
 set_log         Satz: weight_kg (null = Körpergewicht), reps, duration_s, distance_m, is_max, note, extra (später), logged_at
 ```
 
@@ -162,6 +166,22 @@ Gespeichertem). Optionale Textfelder: `""` und `null` löschen, fehlt das Feld, 
 | `POST /api/planned-sessions/:id/start` | Session aus der Einheit (`started_at`/`ended_at` nur zum Nachtragen) |
 | `GET`, `POST /api/exercises/:id/tests`, `DELETE /api/tests/:id` | Testwerte lesen, eintragen (`kind` `one_rm`/`best`), löschen |
 
+**MCP** (`POST /mcp`, nur mit `mcp_enabled`, sonst 404): Streamable HTTP, zustandslos (`src/mcp.ts`, Tools rufen `data/*` direkt auf).
+`Authorization: Bearer sb_…` wird gegen `api_token` geprüft; das Token handelt als sein Besitzer (dieselben Regeln wie in der
+UI). Ein `read`-Token bekommt nur Lese-Tools. Tokens verwaltet man über `GET/POST /api/tokens`, `DELETE /api/tokens/:id`
+(nur Ingress), Klartext nur in der Antwort auf `POST`.
+- **Eigene Schemas für Modelle** (`mcp-schemas.ts`): jedes Eingabefeld mit Beschreibung und Einheit, **Übungen per Name, Alias oder
+  ID** (`resolveExercise` in `data/exercises.ts`: nie raten, nie anlegen, Fehler nennt ähnliche Namen), Sätze mit `count`. Eingaben
+  werden normalisiert und dann gegen die API-Schemas (`schemas.ts`) geprüft, damit Grenzen nur dort stehen.
+- **Kompakte Ausgaben** (`mcp-views.ts`) mit `outputSchema` und `structuredContent` (+ derselbe JSON-Text): Session als Übungsliste mit
+  `summary` („3×5 @ 100 kg“), Plan mit Zeilentext („3×5–8 @ 80 kg (70 % von …)“). Das SDK prüft jede Antwort gegen das Schema.
+  Neue Tools brauchen immer ein Ausgabe-Schema und beschriebene Eingaben (ein Test prüft das).
+- **Auswertung und Eintragen:** `get_today`, `get_exercise_progress`, `get_training_summary` (`data/stats.ts`: Volumen, Epley-1RM,
+  Wochen ab Montag in der Zeitzone des Prozesses) und `log_sets` (`data/log.ts`: offene Session oder neue, Block bei Bedarf).
+- **Ressourcen und Prompts:** Pläne als `sweatbook://programs/{programId}` (nur beigetretene, auch mit `read`-Token); Prompts
+  `analyze_training`, `suggest_next_workout`, `adjust_plan` liefern nur Anweisungen, keine Daten.
+- Neue API-Route = neues Tool in `mcp.ts` (Schreib-Tools mit `write`-Flag, Löschen zusätzlich `destructive`).
+
 Änderungen an Blöcken antworten mit der ganzen Session, Änderungen am Plan mit dem ganzen Programm, damit der Client einfach ersetzt, was er zeigt.
 
 ## Sicherheit
@@ -169,6 +189,9 @@ Gespeichertem). Optionale Textfelder: `""` und `null` löschen, fehlt das Feld, 
 - Der Server nimmt in der App nur Verbindungen von `172.30.32.2` (Supervisor-Ingress) an (`INGRESS_ONLY_IP`, im
   Dockerfile gesetzt). Ohne Verbindungsinfo wird abgelehnt (fail closed). Ohne die Sperre wären die
   `X-Remote-User-*`-Header fälschbar. Nicht lockern und nicht entfernen.
+- **`/mcp` ist bewusst vom Ingress-Guard ausgenommen** (ein Pfadvergleich in `app.ts`), weil externe Clients nicht durch Ingress
+  kommen. Dort zählt nur das Token: `X-Remote-User-*` wird ignoriert, falsche Token werden gedrosselt (429), die Route ist
+  standardmäßig aus (`mcp_enabled`). `/api/*` bleibt unverändert Ingress-only. Die Ausnahme nicht auf andere Pfade ausweiten.
 - **Identität an genau einer Stelle** (Middleware in `app.ts`): Sie macht aus dem HA-Nutzer eine `app_user`-ID. Ein
   späterer Login ohne HA (z. B. Cloudflare Access) kommt nur dort hinzu.
 - **Das Repository ist öffentlich:** keine Zugangsdaten, Tokens, privaten Hostnamen oder Adressen aus dem Heimnetz

@@ -7,6 +7,7 @@ export const paths = {
   session: (sessionId: string) => `#/s/${sessionId}`,
   block: (sessionId: string, blockId: string) => `#/s/${sessionId}/b/${blockId}`,
   catalog: () => "#/exercises",
+  access: () => "#/access",
   programs: () => "#/programs",
   programImport: () => "#/programs/import",
   program: (programId: string) => `#/programs/${programId}`,

@@ -202,6 +202,22 @@ export function deleteExercise(db: Db, userId: string, id: string): void {
   db.prepare("DELETE FROM exercise WHERE id = ?").run(id);
 }
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const MAX_CANDIDATES = 5;
+
+// An exercise named by a person or an agent: its ID, or its exact name or alias (case ignored). Never guesses and never
+// creates: an unknown name is an error that lists similar ones, so the caller can pick or create the exercise itself.
+export function resolveExercise(db: Db, userId: string, ref: string): Exercise {
+  const text = tidy(ref);
+  if (UUID.test(text)) return getExercise(db, userId, text);
+  const key = nameKey(text);
+  const all = listExercises(db, userId);
+  const found = all.find((e) => [e.name, ...e.aliases].some((n) => nameKey(n) === key));
+  if (found) return found;
+  const similar = all.filter((e) => [e.name, ...e.aliases].some((n) => nameKey(n).includes(key))).slice(0, MAX_CANDIDATES);
+  throw new InvalidError(`unknown exercise "${text}"${similar.length ? `; similar: ${similar.map((e) => e.name).join(", ")}` : "; create it with create_exercise"}`);
+}
+
 export function assertUsable(exercise: Exercise): void {
   if (exercise.archived) throw new ConflictError("exercise archived");
 }

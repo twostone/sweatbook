@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.8.0](https://github.com/twostone/sweatbook/compare/v1.7.0...v1.8.0) (2026-10-30)
+
+
+### Neu
+
+* **mcp:** MCP-Server mit Zugriffstoken, Auswertungen und Prompts ([#32](https://github.com/twostone/sweatbook/issues/32)) ([8da2908](https://github.com/twostone/sweatbook/commit/8da2908b724acc081b4061e7fbc4f3a350b50327))
+
 ## [1.7.0](https://github.com/twostone/sweatbook/compare/v1.6.0...v1.7.0) (2026-10-29)
 
 

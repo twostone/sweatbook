@@ -6,7 +6,10 @@ import type {
   HistoryEntry,
   ExerciseTest,
   ImportResult,
+  ApiToken,
+  CreatedToken,
   Me,
+  TokenScope,
   ProgramSummary,
   ProgramTree,
   SessionPatch,
@@ -78,6 +81,11 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 const enc = encodeURIComponent;
 
 export const getMe = () => request<Me>("GET", "api/me");
+
+// Access tokens for the MCP endpoint. The plain token is only in the answer of creation.
+export const listTokens = () => request<ApiToken[]>("GET", "api/tokens");
+export const createToken = (name: string, scope: TokenScope) => request<CreatedToken>("POST", "api/tokens", { name, scope });
+export const revokeToken = (id: string) => request<void>("DELETE", `api/tokens/${enc(id)}`);
 
 // Catalog incl. archived ones, searched over names and aliases, recently used first.
 export const listExercises = (q = "") => request<Exercise[]>("GET", q ? `api/exercises?q=${enc(q)}` : "api/exercises");

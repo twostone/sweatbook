@@ -202,6 +202,19 @@ export const MIGRATIONS: readonly Migration[] = [
     mergeCatalogs(db);
     db.exec(V5_AFTER_MERGE);
   },
+  // v7: API tokens for the MCP endpoint. Only a hash is stored; the token acts as the user who created it.
+  `
+  CREATE TABLE api_token (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES app_user(id) ON DELETE CASCADE,
+    name TEXT NOT NULL CHECK (length(trim(name)) > 0),
+    token_hash TEXT NOT NULL UNIQUE,
+    scope TEXT NOT NULL CHECK (scope IN ('read', 'write')),
+    created_at TEXT NOT NULL,
+    last_used_at TEXT
+  ) STRICT;
+  CREATE INDEX api_token_user ON api_token(user_id);
+  `,
 ];
 
 // exercise_test gets its owner (it was the owner of the exercise); nullable because SQLite cannot add a NOT NULL column

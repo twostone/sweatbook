@@ -5,6 +5,10 @@
 export type Field = "weight" | "reps" | "distance" | "duration";
 export const VALUE_FIELDS: readonly Field[] = ["reps", "distance", "duration"];
 
+export type TokenScope = "read" | "write";
+export type ApiToken = { id: string; name: string; scope: TokenScope; created_at: string; last_used_at: string | null };
+export type CreatedToken = { token: string; info: ApiToken };
+
 export type Me = { id: string; display_name: string | null };
 
 export type Exercise = {

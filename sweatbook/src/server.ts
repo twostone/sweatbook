@@ -25,9 +25,9 @@ const version = (() => {
 const dbPath = process.env.DB_PATH ?? "./data/sweatbook.db";
 if (dbPath !== ":memory:") mkdirSync(dirname(dbPath), { recursive: true });
 const db = openDb(dbPath);
-log.info("starting", { version, log_level: logLevel, schema: schemaVersion(db), tz: process.env.TZ, node: process.version });
+log.info("starting", { version, mcp: options.mcp_enabled === true, log_level: logLevel, schema: schemaVersion(db), tz: process.env.TZ, node: process.version });
 
-const app = createApp(db, { allowedIp: process.env.INGRESS_ONLY_IP });
+const app = createApp(db, { allowedIp: process.env.INGRESS_ONLY_IP, mcpEnabled: options.mcp_enabled === true, version });
 // API routes are registered first; anything else is the built frontend (npm run build).
 app.use("/*", serveStatic({ root: "./dist" }));
 const port = Number(process.env.PORT ?? 8099);

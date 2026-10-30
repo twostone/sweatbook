@@ -28,9 +28,30 @@ Voraussetzung: Home Assistant mit App-Store (Home Assistant OS oder Supervised),
 Home Assistant lädt dabei ein fertiges Image von `ghcr.io/twostone/sweatbook`, es wird nichts lokal gebaut. Die Daten
 liegen im Datenspeicher der App (`/data`) und sind in Home-Assistant-Backups enthalten.
 
+## Zugriff für Claude (MCP)
+
+Die App kann als MCP-Server unter `/mcp` laufen, damit Claude dein Training lesen und eintragen kann (alles, was die
+Oberfläche kann, auch Pläne). Claude handelt dabei in deinem Namen. Übungen nennt Claude einfach beim Namen
+(„3×5 Kniebeuge mit 100 kg eintragen“), und es gibt Auswertungen (Volumen, Fortschritt, geschätztes 1RM) sowie die Prompts
+`analyze_training`, `suggest_next_workout` und `adjust_plan`. Pläne sind außerdem als MCP-Ressourcen
+(`sweatbook://programs/…`) abrufbar.
+
+1. In den App-Optionen `MCP-Server` einschalten und unter Netzwerk einen Host-Port für `8099` vergeben. Von außerhalb
+   des Heimnetzes brauchst du dafür einen Tunnel oder Reverse-Proxy mit HTTPS; die App selbst spricht nur HTTP.
+2. In der App unter „Zugriff für Claude“ ein Token anlegen (nur lesen oder lesen und schreiben). Es wird nur einmal
+   angezeigt und lässt sich dort jederzeit widerrufen.
+3. Verbinden, zum Beispiel mit Claude Code:
+
+```
+claude mcp add --transport http sweatbook https://<adresse>/mcp --header "Authorization: Bearer sb_…"
+```
+
+Wer das Token hat, hat deinen Zugriff; behandle es wie ein Passwort.
+
 ## Datenschutz und Sicherheit
 
 - Die App ist nur über Home-Assistant-Ingress erreichbar. Der Server nimmt ausschließlich Verbindungen vom Supervisor an.
+  Einzige Ausnahme ist der MCP-Endpunkt `/mcp` (standardmäßig aus, siehe unten), der nur mit Zugriffstoken antwortet.
 - Jede Anfrage gehört zu dem Home-Assistant-Nutzer, der sie stellt; andere Nutzer sehen diese Daten nicht.
 - Die App ruft nichts im Internet ab.
 

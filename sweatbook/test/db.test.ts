@@ -160,3 +160,16 @@ test("migration v6: catalogs of all users merge, programs get members and skips"
   assert.deepEqual({ ...db.prepare("SELECT planned_session_id, user_id, skip_note FROM planned_session_skip").get() }, { planned_session_id: "ps", user_id: "anna", skip_note: "krank" });
   assert.deepEqual({ ...db.prepare("SELECT shared FROM program").get() }, { shared: 0 });
 });
+
+test("migration v7: a v6 database gets api_token, existing data stays", () => {
+  const db = new DatabaseSync(":memory:");
+  db.exec("PRAGMA foreign_keys = ON");
+  migrate(db, MIGRATIONS.slice(0, 6));
+  db.prepare("INSERT INTO app_user (id, ha_user_id, created_at) VALUES ('u', 'ha', 'x')").run();
+  migrate(db);
+  assert.equal(schemaVersion(db), 7);
+  db.prepare("INSERT INTO api_token (id, user_id, name, token_hash, scope, created_at) VALUES ('t', 'u', 'n', 'h', 'read', 'x')").run();
+  assert.throws(() => db.prepare("INSERT INTO api_token (id, user_id, name, token_hash, scope, created_at) VALUES ('t2', 'u', 'n', 'h2', 'admin', 'x')").run());
+  db.prepare("DELETE FROM app_user WHERE id = 'u'").run();
+  assert.equal(db.prepare("SELECT count(*) AS n FROM api_token").get()?.n, 0);
+});

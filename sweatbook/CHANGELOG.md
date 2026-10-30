@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.9.0](https://github.com/twostone/sweatbook/compare/v1.8.0...v1.9.0) (2026-10-30)
+
+
+### Neu
+
+* **profil:** Access Token im Profil, Icon in jedem Header ([#35](https://github.com/twostone/sweatbook/issues/35)) ([4659506](https://github.com/twostone/sweatbook/commit/465950621b4c4cb21c4509a3c44350470137d9a7))
+
 ## [1.8.0](https://github.com/twostone/sweatbook/compare/v1.7.0...v1.8.0) (2026-10-30)
 
 

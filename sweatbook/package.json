@@ -1,6 +1,6 @@
 {
   "name": "sweatbook",
-  "version": "1.8.0",
+  "version": "1.9.0",
   "private": true,
   "description": "Trainings-Tracker als Home-Assistant-App",
   "license": "Apache-2.0",

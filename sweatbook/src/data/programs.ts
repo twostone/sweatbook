@@ -24,6 +24,9 @@ export type PhaseTree = { id: string; name: string; note: string | null };
 export type WeekTree = { id: string; number: number; phase_id: string | null; phase: string | null; deload: boolean; sessions: PlannedSessionTree[] };
 export type NextWorkout = { planned_session_id: string; week: number; phase: string | null; label: string };
 
+// A planned session in training order, without its contents: what a joiner picks the entry point from.
+export type OutlineEntry = { id: string; week: number; label: string };
+
 export type ProgramSummary = {
   id: string;
   name: string;
@@ -36,6 +39,7 @@ export type ProgramSummary = {
   done: number; // planned sessions done or skipped
   total: number;
   next: NextWorkout | null; // the first open planned session in order
+  outline: OutlineEntry[] | null; // only for a program not joined yet
 };
 export type ProgramTree = ProgramSummary & { phases: PhaseTree[]; weeks: WeekTree[]; tests: (ExerciseTest & { exercise_name: string })[] };
 
@@ -132,6 +136,7 @@ function summarize(userId: string, program: ProgramRow, rows: SessionRow[]): Pro
     done: rows.length - open.length,
     total: rows.length,
     next: first ? { planned_session_id: first.id, week: first.week, phase: first.phase, label: first.label } : null,
+    outline: program.member === null ? rows.map((r) => ({ id: r.id, week: r.week, label: r.label })) : null,
   };
 }
 
@@ -234,11 +239,25 @@ export function updateProgram(db: Db, userId: string, id: string, patch: Program
   return getProgram(db, userId, id);
 }
 
-// Take up a program somebody shared, with a start date of one's own. Joining again changes nothing.
-export function joinProgram(db: Db, userId: string, id: string, startDate: string): ProgramTree {
+export const JOIN_SKIP_NOTE = "vor dem Beitritt";
+
+// Take up a program somebody shared, with a start date of one's own. With `startPlannedSessionId` every earlier
+// planned session (training order) counts as skipped for the joiner. Joining again changes nothing.
+export function joinProgram(db: Db, userId: string, id: string, startDate: string, startPlannedSessionId?: string): ProgramTree {
   const row = db.prepare(`${PROGRAM_SELECT} WHERE p.id = ? AND p.shared = 1`).get(userId, id) as ProgramRow | undefined;
   if (!row) throw new NotFoundError("program");
-  if (row.member === null) insertMember(db, id, userId, startDate);
+  if (row.member !== null) return getProgram(db, userId, id);
+  const rows = sessionRows(db, userId, id);
+  const start = startPlannedSessionId === undefined ? 0 : rows.findIndex((r) => r.id === startPlannedSessionId);
+  if (start < 0) throw new InvalidError("start_planned_session_id is not a planned session of this program");
+  transaction(db, () => {
+    insertMember(db, id, userId, startDate);
+    const skip = db.prepare(
+      "INSERT INTO planned_session_skip (planned_session_id, user_id, skipped_at, skip_note) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING",
+    );
+    const now = isoNow();
+    for (const earlier of rows.slice(0, start)) skip.run(earlier.id, userId, now, JOIN_SKIP_NOTE);
+  });
   return getProgram(db, userId, id);
 }
 

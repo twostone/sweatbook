@@ -4,6 +4,7 @@
   import * as api from "./api";
   import { goUp, navigate, paths } from "./router.svelte";
   import { guard } from "./store.svelte";
+  import { joinStartDate } from "./logic/plan";
   import type { ProgramSummary } from "./types";
 
   // The programs (plans): progress and the next workout. Opening one shows its weeks.
@@ -39,11 +40,20 @@
   const archived = $derived(programs.filter((p) => p.joined && p.archived));
   const offered = $derived(programs.filter((p) => !p.joined));
 
-  // Taking up a shared program: it opens with a start of one's own (the coming Monday by default).
+  // Taking up a shared program: pick the entry (earlier planned sessions count as skipped) and a start of one's own.
+  let joining = $state<string | null>(null);
+  let entryId = $state("");
+  let joinStart = $state("");
+  const entryWeek = (p: ProgramSummary, id: string) => p.outline?.find((e) => e.id === id)?.week ?? 1;
+  function openJoin(p: ProgramSummary) {
+    joining = p.id;
+    entryId = p.outline?.[0]?.id ?? "";
+    joinStart = joinStartDate(entryWeek(p, entryId));
+  }
   async function join(p: ProgramSummary) {
     busy = true;
     await guard(async () => {
-      await api.joinProgram(p.id, nextMonday());
+      await api.joinProgram(p.id, joinStart, entryId || undefined);
       navigate(paths.program(p.id));
     });
     busy = false;
@@ -95,7 +105,27 @@
         <div class="card program">
           <span class="name">{p.name}</span>
           <span class="muted">Von {p.owner_name ?? "einem anderen Nutzer"} · {p.total} Einheiten</span>
-          <button type="button" class="btn strong" disabled={busy} onclick={() => join(p)}>Hinzufügen</button>
+          {#if joining === p.id}
+            <form class="create" onsubmit={(e) => { e.preventDefault(); join(p); }}>
+              {#if p.outline?.length}
+                <label>
+                  Einstieg bei
+                  <select class="field" bind:value={entryId} onchange={() => (joinStart = joinStartDate(entryWeek(p, entryId)))}>
+                    {#each p.outline as e (e.id)}
+                      <option value={e.id}>Woche {e.week} · {e.label}</option>
+                    {/each}
+                  </select>
+                </label>
+              {/if}
+              <label>Start (Montag von Woche 1)<input class="field" type="date" bind:value={joinStart} required /></label>
+              <div class="pair">
+                <button type="button" class="btn" onclick={() => (joining = null)}>Abbrechen</button>
+                <button type="submit" class="btn strong" disabled={busy || !joinStart}>Beitreten</button>
+              </div>
+            </form>
+          {:else}
+            <button type="button" class="btn strong" disabled={busy} onclick={() => openJoin(p)}>Hinzufügen</button>
+          {/if}
         </div>
       {/each}
     {/if}

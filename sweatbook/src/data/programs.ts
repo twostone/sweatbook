@@ -437,6 +437,7 @@ export type PlanItemInput = {
   duration_s: Range | null;
   to_max: boolean;
   load_kg: number | null;
+  load_kg_female: number | null;
   load_pct: number | null;
   load_ref_exercise_id: string | null;
   test_kind: TestKind | null;
@@ -457,6 +458,7 @@ function rowToInput(row: PlanItemRow): PlanItemInput {
     duration_s: pair(row.duration_min_s, row.duration_max_s),
     to_max: toBool(row.to_max),
     load_kg: row.load_kg,
+    load_kg_female: row.load_kg_female,
     load_pct: row.load_pct,
     load_ref_exercise_id: row.load_ref_exercise_id,
     test_kind: row.test_kind,
@@ -468,7 +470,7 @@ function rowToInput(row: PlanItemRow): PlanItemInput {
 // A line with an exercise may only have targets in fields the exercise has; a line without one is a note.
 export function checkItem(db: Db, userId: string, input: PlanItemInput): void {
   if (input.exercise_id === null) {
-    const targets = [input.label, input.sets, input.reps, input.distance_m, input.duration_s, input.load_kg, input.load_pct, input.load_ref_exercise_id, input.test_kind];
+    const targets = [input.label, input.sets, input.reps, input.distance_m, input.duration_s, input.load_kg, input.load_kg_female, input.load_pct, input.load_ref_exercise_id, input.test_kind];
     if (!input.note?.trim()) throw new InvalidError("a line without exercise needs a note");
     if (input.to_max || targets.some((t) => t !== null)) throw new InvalidError("a line without exercise has no targets");
     return;
@@ -481,6 +483,7 @@ export function checkItem(db: Db, userId: string, input: PlanItemInput): void {
     [input.load_kg ?? input.load_pct, "load", fields.includes("weight")],
   ];
   for (const [value, name, has] of needs) if (value !== null && !has) throw new InvalidError(`${name} not allowed for this exercise`);
+  if (input.load_kg_female !== null && input.load_kg === null) throw new InvalidError("load_kg_female needs load_kg");
   if (input.load_kg !== null && input.load_pct !== null) throw new InvalidError("load_kg and load_pct exclude each other");
   if ((input.load_pct === null) !== (input.load_ref_exercise_id === null)) throw new InvalidError("load_pct and load_ref_exercise_id belong together");
   if (input.load_ref_exercise_id !== null && !getExercise(db, userId, input.load_ref_exercise_id).fields.includes("weight")) {
@@ -508,6 +511,7 @@ export function writeItem(db: Db, plannedSessionId: string, itemId: string | nul
     tMax,
     input.to_max ? 1 : 0,
     input.load_kg,
+    input.load_kg_female,
     input.load_pct,
     input.load_ref_exercise_id,
     input.test_kind,
@@ -517,13 +521,13 @@ export function writeItem(db: Db, plannedSessionId: string, itemId: string | nul
   if (itemId === null) {
     db.prepare(
       `INSERT INTO planned_item (id, planned_session_id, position, exercise_id, label, sets_min, sets_max, reps_min, reps_max,
-         distance_min_m, distance_max_m, duration_min_s, duration_max_s, to_max, load_kg, load_pct, load_ref_exercise_id,
-         test_kind, rest, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         distance_min_m, distance_max_m, duration_min_s, duration_max_s, to_max, load_kg, load_kg_female, load_pct,
+         load_ref_exercise_id, test_kind, rest, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(newId(), plannedSessionId, nextPosition(db, "planned_item", "planned_session_id", plannedSessionId), ...values);
   } else {
     db.prepare(
       `UPDATE planned_item SET exercise_id = ?, label = ?, sets_min = ?, sets_max = ?, reps_min = ?, reps_max = ?,
-         distance_min_m = ?, distance_max_m = ?, duration_min_s = ?, duration_max_s = ?, to_max = ?, load_kg = ?, load_pct = ?,
+         distance_min_m = ?, distance_max_m = ?, duration_min_s = ?, duration_max_s = ?, to_max = ?, load_kg = ?, load_kg_female = ?, load_pct = ?,
          load_ref_exercise_id = ?, test_kind = ?, rest = ?, note = ? WHERE id = ?`,
     ).run(...values, itemId);
   }

@@ -329,6 +329,59 @@ test("sharing: stopping it locks members out and keeps their sessions; sharing a
   assert.equal((await ben("GET", `/api/sessions/${session.id}`)).json.plan, null);
 });
 
+// A program with one planned session; the lines are added by the tests.
+async function sexPlan(call: Call) {
+  const e = (await call("POST", "/api/exercises", { name: "Kettlebell Swing", fields: ["weight", "reps"] })).json;
+  let program = (await call("POST", "/api/programs", { name: "P", start_date: "2026-08-31" })).json;
+  program = (await call("POST", `/api/programs/${program.id}/weeks`, {})).json;
+  program = (await call("POST", `/api/weeks/${program.weeks[0].id}/sessions`, { label: "A" })).json;
+  const session = program.weeks[0].sessions[0];
+  const add = (body: unknown) => call("POST", `/api/planned-sessions/${session.id}/items`, { exercise_id: e.id, sets: [3, 3], reps: [10, 10], ...(body as object) });
+  return { e, program, session, add };
+}
+
+test("sex: a woman sees the women's weight, a user without a choice and a man the default; the line keeps both", async () => {
+  const { as } = setup();
+  const woman = as("ha-woman");
+  const { program, session, add } = await sexPlan(woman);
+  await woman("PATCH", "/api/me", { sex: "female" });
+  await add({ load_kg: 24, load_kg_female: 16 });
+  const both = (await add({ label: "nur Standard", load_kg: 20 })).json;
+  const line = (p: any, i: number) => p.weeks[0].sessions[0].items[i];
+  assert.deepEqual([line(both, 0).weight_kg, line(both, 0).load_kg, line(both, 0).load_kg_female], [16, 24, 16]);
+  assert.equal(line(both, 1).weight_kg, 20);
+  // the session started from the plan follows
+  const started = (await woman("POST", `/api/planned-sessions/${session.id}/start`, {})).json;
+  assert.deepEqual(started.blocks.map((b: any) => b.exercises[0].planned.weight_kg), [16, 20]);
+  // other users of the same plan: default weight
+  const man = as("ha-man");
+  await woman("PATCH", `/api/programs/${program.id}`, { shared: true });
+  await man("POST", `/api/programs/${program.id}/join`, { start_date: "2026-08-31" });
+  assert.equal(line((await man("GET", `/api/programs/${program.id}`)).json, 0).weight_kg, 24);
+  await man("PATCH", "/api/me", { sex: "male" });
+  assert.equal(line((await man("GET", `/api/programs/${program.id}`)).json, 0).weight_kg, 24);
+  await woman("PATCH", "/api/me", { sex: null });
+  assert.equal(line((await woman("GET", `/api/programs/${program.id}`)).json, 0).weight_kg, 24);
+});
+
+test("sex: load_kg_female needs load_kg and excludes a percent load", async () => {
+  const { call } = setup();
+  const { e, add } = await sexPlan(call);
+  assert.equal((await add({ load_kg_female: 16 })).status, 400);
+  assert.equal((await add({ load_pct: 80, load_ref_exercise_id: e.id, load_kg_female: 16 })).status, 400);
+  assert.equal((await add({ load_kg: 24, load_kg_female: 16 })).status, 201);
+});
+
+test("me: sex can be set and cleared, other values are refused", async () => {
+  const { call } = setup();
+  assert.equal((await call("GET", "/api/me")).json.sex, null);
+  assert.equal((await call("PATCH", "/api/me", { sex: "female" })).json.sex, "female");
+  assert.equal((await call("GET", "/api/me")).json.sex, "female");
+  assert.equal((await call("PATCH", "/api/me", { sex: null })).json.sex, null);
+  assert.equal((await call("PATCH", "/api/me", { sex: "x" })).status, 400);
+  assert.equal((await call("PATCH", "/api/me", {})).status, 400);
+});
+
 test("sharing: joining with a start skips the earlier planned sessions for the joiner only", async () => {
   const { call, as } = setup();
   const { program } = await plan(call);

@@ -76,6 +76,7 @@ export const planItemFields = {
   duration_s: range,
   to_max: z.boolean().optional(),
   load_kg: z.number().min(0).max(1000).nullable().optional(),
+  load_kg_female: z.number().min(0).max(1000).nullable().optional(),
   load_pct: z.number().gt(0).max(MAX_LOAD_PCT).nullable().optional(),
   load_ref_exercise_id: id.nullable().optional(),
   test_kind: z.enum(["one_rm", "best"]).nullable().optional(),
@@ -93,6 +94,7 @@ export const planItemBody = planItemPatch.transform(
     duration_s: v.duration_s ?? null,
     to_max: v.to_max ?? false,
     load_kg: v.load_kg ?? null,
+    load_kg_female: v.load_kg_female ?? null,
     load_pct: v.load_pct ?? null,
     load_ref_exercise_id: v.load_ref_exercise_id ?? null,
     test_kind: v.test_kind ?? null,
@@ -140,7 +142,7 @@ export const importLine = z.union([
     max: z.boolean().optional(),
     load: z
       .union([
-        z.strictObject({ kg: z.number().min(0).max(1000) }),
+        z.strictObject({ kg: z.number().min(0).max(1000), kg_female: z.number().min(0).max(1000).optional() }),
         z.strictObject({ percent: z.number().gt(0).max(MAX_LOAD_PCT), of: importKey }),
       ])
       .optional(),
@@ -183,6 +185,7 @@ export const importBody = z.object({
   }),
 });
 
+export const mePatch = z.object({ sex: z.enum(["male", "female"]).nullable() });
 export const tokenBody = z.object({ name: z.string().trim().min(1).max(60), scope: z.enum(["read", "write"]) });
 
 export const plannedSessionStart = z.object({ started_at: isoTime.optional(), ended_at: isoTime.optional() });

@@ -14,6 +14,7 @@ const item = (over: Partial<PlanItem>): PlanItem => ({
   duration_s: null,
   to_max: false,
   load_kg: null,
+  load_kg_female: null,
   load_pct: null,
   load_ref: null,
   weight_kg: null,

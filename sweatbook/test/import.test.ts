@@ -84,3 +84,13 @@ test("import: an archived exercise in the file is refused", async () => {
   await call("PATCH", `/api/exercises/${e.id}`, { archived: true });
   assert.equal((await call("POST", "/api/programs/import", { file: example() })).status, 409);
 });
+
+test("import: load.kg_female becomes the women's weight of the line", async () => {
+  const woman = setup();
+  await woman.call("PATCH", "/api/me", { sex: "female" });
+  const p = (await woman.call("POST", "/api/programs/import", { file: example() })).json.program;
+  const line = p.weeks[1].sessions[1].items[0];
+  assert.deepEqual([line.load_kg, line.load_kg_female, line.weight_kg], [40, 25, 25]);
+  const man = (await setup().call("POST", "/api/programs/import", { file: example() })).json.program;
+  assert.equal(man.weeks[1].sessions[1].items[0].weight_kg, 40);
+});

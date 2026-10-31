@@ -9,6 +9,7 @@ import type {
   ApiToken,
   CreatedToken,
   Me,
+  Sex,
   TokenScope,
   ProgramSummary,
   ProgramTree,
@@ -81,6 +82,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 const enc = encodeURIComponent;
 
 export const getMe = () => request<Me>("GET", "api/me");
+export const setSex = (sex: Sex | null) => request<Me>("PATCH", "api/me", { sex });
 
 // Access tokens for the MCP endpoint. The plain token is only in the answer of creation.
 export const listTokens = () => request<ApiToken[]>("GET", "api/tokens");

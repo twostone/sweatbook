@@ -16,7 +16,7 @@ test("summarizeSets: equal neighbours are counted, bodyweight has no weight, tim
 
 const item = (over: Partial<PlanItem>): PlanItem => ({
   id: "i", position: 0, exercise: { id: "e", name: "Kniebeuge", fields: ["weight", "reps"] }, label: null, sets: null, reps: null, distance_m: null,
-  duration_s: null, to_max: false, load_kg: null, load_pct: null, load_ref: null, weight_kg: null, test_kind: null, rest: null, note: null, ...over,
+  duration_s: null, to_max: false, load_kg: null, load_kg_female: null, load_pct: null, load_ref: null, weight_kg: null, test_kind: null, rest: null, note: null, ...over,
 });
 
 test("planText: sets, reps, load and what the plan leaves out", () => {

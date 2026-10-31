@@ -53,6 +53,7 @@ const planned = (over: Partial<NonNullable<SessionExercise["planned"]>>): Sessio
   duration_s: null,
   to_max: false,
   load_kg: null,
+  load_kg_female: null,
   load_pct: 85,
   load_ref: null,
   weight_kg: 97.5,

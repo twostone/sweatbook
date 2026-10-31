@@ -57,7 +57,7 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
 ## Datenmodell
 
 ```
-app_user        HA-Nutzer -> eigene id (ha_user_id eindeutig)
+app_user        HA-Nutzer -> eigene id (ha_user_id eindeutig); sex male|female|null: welche festen Gewichte Pläne zeigen (null = Standard)
 exercise        gemeinsamer Katalog aller Nutzer (user_id = angelegt von, nie gefiltert): name, Satzfelder (has_weight, has_reps, has_distance, has_duration), note, archived
 exercise_alias  weitere Namen für die Suche
 session         ein Training: title, started_at, ended_at (null = läuft), note
@@ -69,7 +69,7 @@ planned_session_skip  übersprungene Einheit je Nutzer (skipped_at, skip_note); 
 program_phase   Abschnitt (Mesozyklus) eines Programms: name (pro Programm eindeutig), note; die Excel nennt ihn „Block“
 program_week    Woche (Mikrozyklus): number, phase_id (-> program_phase, null = ohne Abschnitt), deload (nur Anzeige)
 planned_session geplante Einheit einer Woche („A“, „B“)
-planned_item    Planzeile: Übung oder Hinweiszeile (ohne Übung), label (Variante), Soll als Spannen (Sätze, Wdh., Strecke, Zeit), to_max, Last fest oder % einer Bezugsübung, test_kind, rest, note
+planned_item    Planzeile: Übung oder Hinweiszeile (ohne Übung), label (Variante), Soll als Spannen (Sätze, Wdh., Strecke, Zeit), to_max, Last fest (`load_kg`, optional `load_kg_female` nur zusammen damit) oder % einer Bezugsübung, test_kind, rest, note
 exercise_test   Testwert eines Nutzers zu einer Übung (1RM oder Bestleistung), Werte wie ein Satz; set_id, wenn aus einem Trainingssatz (geht mit ihm)
 api_token       Access Token für /mcp: user_id, name, token_hash (SHA-256, nie der Klartext), scope read|write, last_used_at
 set_log         Satz: weight_kg (null = Körpergewicht), reps, duration_s, distance_m, is_max, note, extra (später), logged_at
@@ -96,6 +96,7 @@ set_log         Satz: weight_kg (null = Körpergewicht), reps, duration_s, dista
 - **„+ Runde“** im Supersatz (`POST /api/blocks/:id/rounds`) legt je Übung genau einen Satz an, alles oder nichts. Die
   Werte schickt der Client (in der Regel sein letzter Satz); der Server rät nichts.
 - **Pläne teilen:** Der Besitzer schaltet `shared` ein; jeder andere sieht den Plan in der Liste (`joined: false`), tritt mit `POST /api/programs/:id/join` (eigenes Startdatum, optional `start_planned_session_id`: alle früheren Einheiten gelten für ihn als übersprungen, Notiz „vor dem Beitritt“; fremde ID = 400) bei und bearbeitet dann denselben Plan mit (Last-Write-Wins). Nur der Besitzer benennt um, teilt/entteilt und löscht (sonst 403, `ForbiddenError`). Startdatum, Archiv, übersprungen, erledigt (nur eigene Sessions) und Testwerte/1RM sind je Nutzer. Ohne Teilen oder ohne Beitritt: 404. Teilen aus sperrt die Mitglieder aus, ihre Sessions bleiben, die Mitgliedschaft lebt beim erneuten Teilen auf. Zugriffsregel an einer Stelle: `ACCESS`/`programRow` in `data/programs.ts`.
+- **Gewichte für Männer und Frauen:** Eine Zeile mit fester Last kann `load_kg_female` tragen (nicht mit `load_pct`, nicht allein; 400). `weight_kg` ist für Nutzer mit `sex = female` dieses Gewicht, sonst `load_kg`; Pläne und Sessions zeigen nur `weight_kg`, der Editor kennt beide. Die Wahl trifft jeder im Profil (`PATCH /api/me`), bewusst ohne MCP-Tool (nur Ingress, wie Tokens). Import: `load: { "kg": 24, "kg_female": 16 }`.
 - **Pläne rechnen, speichern nichts Geplantes:** Gewicht einer %-Zeile = jüngster 1RM der Bezugsübung bis einschließlich
   Trainingstag (für kommende Einheiten der jüngste bekannte) × Prozent, auf 2,5 kg gerundet (`plan.ts`); ohne 1RM bleibt
   `weight_kg` leer. **Erledigt** ist eine Einheit, sobald eine daran hängende Session Sätze hat (`done`), oder wenn sie
@@ -139,7 +140,8 @@ Gespeichertem). Optionale Textfelder: `""` und `null` löschen, fehlt das Feld, 
 
 | Methode und Pfad | Zweck |
 | --- | --- |
-| `GET /api/me` | eigene Nutzer-ID und Anzeigename |
+| `GET /api/me` | eigene Nutzer-ID, Anzeigename und `sex` |
+| `PATCH /api/me` | `sex` (`male`/`female`/`null`): welche festen Gewichte Pläne zeigen |
 | `GET /api/exercises?q=` | Katalog inkl. archivierter, Suche über Namen und Aliase, zuletzt genutzte zuerst |
 | `POST /api/exercises` | anlegen (`name`, `fields`, `note`, `aliases`) |
 | `GET`, `PATCH`, `DELETE /api/exercises/:id` | lesen, ändern (`aliases` ersetzt die Liste, `archived`), löschen nur unbenutzt |

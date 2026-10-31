@@ -32,7 +32,7 @@ import { createTest, deleteTest, listTests } from "./data/tests.ts";
 import { createExercise, deleteExercise, getExercise, listExercises, updateExercise } from "./data/exercises.ts";
 import { createSession, deleteSession, exerciseHistory, getSession, listSessions, updateSession } from "./data/sessions.ts";
 import { addSets, deleteSet, updateSet } from "./data/sets.ts";
-import { resolveUser, type User } from "./data/users.ts";
+import { resolveUser, setUserSex, type User } from "./data/users.ts";
 import { createToken, listTokens, revokeToken } from "./data/tokens.ts";
 import { createFailureLimiter, handleMcp } from "./mcp-http.ts";
 import { logger } from "./log.ts";
@@ -63,6 +63,7 @@ import {
   plannedSessionPatch,
   MAX_PLAN_ITEMS,
   testBody,
+  mePatch,
   tokenBody,
   importBody,
 } from "./schemas.ts";
@@ -134,6 +135,7 @@ export function createApp(db: Db, opts: AppOptions = {}) {
   });
 
   app.get("/api/me", (c) => c.json(c.get("user")));
+  app.patch("/api/me", zValidator("json", mePatch), (c) => c.json(setUserSex(db, c.get("user"), c.req.valid("json").sex)));
 
   // MCP access tokens: managed in the app (ingress), used on /mcp. The plain token is shown once, at creation.
   app.get("/api/tokens", (c) => c.json(listTokens(db, c.get("user").id)));

@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createApp } from "../src/app.ts";
 import { openDb } from "../src/db.ts";
+import { setUserSex } from "../src/data/users.ts";
 import { createToken, listTokens, resolveToken, revokeToken } from "../src/data/tokens.ts";
 import { resolveUser } from "../src/data/users.ts";
 import { NotFoundError } from "../src/data/common.ts";
@@ -224,6 +225,18 @@ test("mcp prompts: listed for every token, arguments end up in the text", async 
   assert.match(analysis, /get_training_summary/);
   const adjust = (await rpc(read, "prompts/get", { name: "adjust_plan", arguments: { request: "Woche 3 leichter" } })).json.result.messages[0].content.text;
   assert.match(adjust, /Woche 3 leichter/);
+});
+
+test("mcp: a plan line with separate weights shows the weight for the token's user", async () => {
+  const { db, call, anna } = setup();
+  setUserSex(db, { id: anna, display_name: null, sex: null }, "female");
+  const t = createToken(db, anna, { name: "w", scope: "write" }).token;
+  await call(t, "create_exercise", { name: "Kettlebell Swing", fields: ["weight", "reps"] });
+  const program = (await call(t, "create_program", { name: "Plan", start_date: "2026-11-02" })).data;
+  const week = (await call(t, "add_week", { program_id: program.id })).data.weeks[0];
+  const plannedId = (await call(t, "add_planned_session", { week_id: week.id, label: "A" })).data.weeks[0].sessions[0].id;
+  const line = (await call(t, "add_plan_item", { planned_session_id: plannedId, exercise: "Kettlebell Swing", sets: 3, reps: 10, load_kg: 24, load_kg_female: 16 })).data;
+  assert.equal(line.weeks[0].sessions[0].rows[0].text, "3×10 @ 16 kg");
 });
 
 test("mcp: join_program with start_week and start_label skips the earlier planned sessions", async () => {

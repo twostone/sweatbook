@@ -16,6 +16,7 @@ export type ItemForm = {
   duration: string; // seconds
   loadKind: "none" | "kg" | "pct";
   loadKg: string;
+  loadKgFemale: string;
   loadPct: string;
   loadRef: ExerciseRef | null;
   testKind: TestKind | "";
@@ -33,6 +34,7 @@ export const emptyForm = (exercise: ExerciseRef | null): ItemForm => ({
   duration: "",
   loadKind: "none",
   loadKg: "",
+  loadKgFemale: "",
   loadPct: "",
   loadRef: null,
   testKind: "",
@@ -50,6 +52,7 @@ export const formFromItem = (item: PlanItem): ItemForm => ({
   duration: rangeInput(item.duration_s),
   loadKind: item.load_pct !== null ? "pct" : item.load_kg !== null ? "kg" : "none",
   loadKg: item.load_kg === null ? "" : String(item.load_kg).replace(".", ","),
+  loadKgFemale: item.load_kg_female === null ? "" : String(item.load_kg_female).replace(".", ","),
   loadPct: item.load_pct === null ? "" : String(item.load_pct).replace(".", ","),
   loadRef: item.load_ref,
   testKind: item.test_kind ?? "",
@@ -69,6 +72,7 @@ export type ItemBody = {
   duration_s: [number, number] | null;
   to_max: boolean;
   load_kg: number | null;
+  load_kg_female: number | null;
   load_pct: number | null;
   load_ref_exercise_id: string | null;
   test_kind: TestKind | null;
@@ -94,12 +98,16 @@ export function itemBody(form: ItemForm): ItemBody | { invalid: string } {
   if (duration === undefined) return { invalid: "duration" };
 
   let loadKg: number | null = null;
+  let loadKgFemale: number | null = null;
   let loadPct: number | null = null;
   let loadRef: string | null = null;
   if (hasField(form, "weight") && form.loadKind === "kg") {
     const kg = parseKg(form.loadKg);
     if (kg === undefined) return { invalid: "load" };
     loadKg = kg;
+    const female = parseKg(form.loadKgFemale);
+    if (female === undefined) return { invalid: "load" };
+    loadKgFemale = loadKg === null ? null : female;
   } else if (hasField(form, "weight") && form.loadKind === "pct") {
     const pct = parseKg(form.loadPct);
     if (pct === undefined || pct === null || pct <= 0 || pct > MAX_PCT || form.loadRef === null) return { invalid: "load" };
@@ -115,6 +123,7 @@ export function itemBody(form: ItemForm): ItemBody | { invalid: string } {
     duration_s: duration,
     to_max: hasField(form, "reps") && form.toMax,
     load_kg: loadKg,
+    load_kg_female: loadKgFemale,
     load_pct: loadPct,
     load_ref_exercise_id: loadRef,
     test_kind: form.testKind === "one_rm" && !hasField(form, "weight") ? null : form.testKind || null,
@@ -132,6 +141,7 @@ const nothing = (): ItemBody => ({
   duration_s: null,
   to_max: false,
   load_kg: null,
+  load_kg_female: null,
   load_pct: null,
   load_ref_exercise_id: null,
   test_kind: null,

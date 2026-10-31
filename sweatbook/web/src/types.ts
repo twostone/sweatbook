@@ -9,7 +9,8 @@ export type TokenScope = "read" | "write";
 export type ApiToken = { id: string; name: string; scope: TokenScope; created_at: string; last_used_at: string | null };
 export type CreatedToken = { token: string; info: ApiToken };
 
-export type Me = { id: string; display_name: string | null };
+export type Sex = "male" | "female";
+export type Me = { id: string; display_name: string | null; sex: Sex | null };
 
 export type Exercise = {
   id: string;
@@ -83,6 +84,7 @@ export type PlanItem = {
   duration_s: Range | null;
   to_max: boolean;
   load_kg: number | null;
+  load_kg_female: number | null;
   load_pct: number | null;
   load_ref: ExerciseRef | null;
   weight_kg: number | null;

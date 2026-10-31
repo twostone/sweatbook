@@ -215,6 +215,12 @@ export const MIGRATIONS: readonly Migration[] = [
   ) STRICT;
   CREATE INDEX api_token_user ON api_token(user_id);
   `,
+  // v8: separate fixed weight for women on a plan line (only together with load_kg, checked in the app) and the user's
+  // choice which one plans show (null = not set, the default weight).
+  `
+  ALTER TABLE planned_item ADD COLUMN load_kg_female REAL CHECK (load_kg_female >= 0);
+  ALTER TABLE app_user ADD COLUMN sex TEXT CHECK (sex IN ('male', 'female'));
+  `,
 ];
 
 // exercise_test gets its owner (it was the owner of the exercise); nullable because SQLite cannot add a NOT NULL column

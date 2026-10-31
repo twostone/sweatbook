@@ -228,7 +228,8 @@
               <label class="check"><input type="radio" bind:group={form.loadKind} value="pct" />%</label>
             </div>
             {#if form.loadKind === "kg"}
-              <input class="field" inputmode="decimal" aria-label="Gewicht in kg" bind:value={form.loadKg} placeholder="72,5" />
+              <label>Männer (kg)<input class="field" inputmode="decimal" bind:value={form.loadKg} placeholder="72,5" /></label>
+              <label>Frauen (kg), optional<input class="field" inputmode="decimal" bind:value={form.loadKgFemale} placeholder="50" /></label>
             {:else if form.loadKind === "pct"}
               <input class="field" inputmode="decimal" aria-label="Prozent" bind:value={form.loadPct} placeholder="85" />
               {#if form.loadRef && !pickingRef}

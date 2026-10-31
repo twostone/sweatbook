@@ -166,10 +166,23 @@ test("migration v7: a v6 database gets api_token, existing data stays", () => {
   db.exec("PRAGMA foreign_keys = ON");
   migrate(db, MIGRATIONS.slice(0, 6));
   db.prepare("INSERT INTO app_user (id, ha_user_id, created_at) VALUES ('u', 'ha', 'x')").run();
-  migrate(db);
+  migrate(db, MIGRATIONS.slice(0, 7));
   assert.equal(schemaVersion(db), 7);
   db.prepare("INSERT INTO api_token (id, user_id, name, token_hash, scope, created_at) VALUES ('t', 'u', 'n', 'h', 'read', 'x')").run();
   assert.throws(() => db.prepare("INSERT INTO api_token (id, user_id, name, token_hash, scope, created_at) VALUES ('t2', 'u', 'n', 'h2', 'admin', 'x')").run());
   db.prepare("DELETE FROM app_user WHERE id = 'u'").run();
   assert.equal(db.prepare("SELECT count(*) AS n FROM api_token").get()?.n, 0);
+});
+
+test("migration v8: a v7 database gets load_kg_female and sex, existing data stays", () => {
+  const db = new DatabaseSync(":memory:");
+  db.exec("PRAGMA foreign_keys = ON");
+  migrate(db, MIGRATIONS.slice(0, 7));
+  db.prepare("INSERT INTO app_user (id, ha_user_id, created_at) VALUES ('u', 'ha', 'x')").run();
+  migrate(db);
+  assert.equal(schemaVersion(db), 8);
+  assert.equal(db.prepare("SELECT sex FROM app_user WHERE id = 'u'").get()?.sex, null);
+  db.prepare("UPDATE app_user SET sex = 'female' WHERE id = 'u'").run();
+  assert.throws(() => db.prepare("UPDATE app_user SET sex = 'x' WHERE id = 'u'").run());
+  assert.equal(db.prepare("SELECT count(*) AS n FROM planned_item WHERE load_kg_female IS NOT NULL").get()?.n, 0);
 });

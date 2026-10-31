@@ -6,12 +6,13 @@
   import type { PlanTarget } from "./logic/plan-edit";
   import { currentWeek, formatPlanLine, clusterProgress, formatTest, groupWeeksByPhase, stateText, TEST_KIND_NAMES, weekDates } from "./logic/plan";
   import { goUp, navigate, paths } from "./router.svelte";
-  import { guard } from "./store.svelte";
+  import Sheet from "./Sheet.svelte";
+  import { app, closeSheet, closeSheetThen, guard, openSheet } from "./store.svelte";
   import type { ProgramTree } from "./types";
 
   // A program: the weeks by phase with the state of each planned session, the current week open, and the test values.
-  // From WIDE_QUERY on it is week columns, clustered by phase and wrapping, with an editor beside it; below, the weeks are a list and lines are
-  // edited from the planned session page.
+  // From WIDE_QUERY on it is week columns, clustered by phase and wrapping, with an editor beside it; below, the weeks are a list, lines are
+  // edited from the planned session page and the program settings open in a sheet.
   let { programId }: { programId: string } = $props();
   let program = $state<ProgramTree | null>(null);
 
@@ -42,9 +43,30 @@
     collapsed = next;
   }
 
+  // Leaving a shared program: asks once more.
+  let confirmingLeave = $state(false);
+  let leaving = $state(false);
+  async function leave() {
+    leaving = true;
+    const ok = await guard(() => api.leaveProgram(programId));
+    leaving = false;
+    if (ok) closeSheetThen(() => goUp(paths.programs()));
+  }
+
   let selected = $state<PlanTarget | null>(null);
   const isSelected = (t: PlanTarget) => selected?.kind === t.kind && "id" in selected && "id" in t && selected.id === t.id;
 </script>
+
+{#snippet sharedLine(p: ProgramTree)}
+  {#if !p.owned}
+    <p class="muted summary shared">
+      Geteilt von {p.owner_name ?? "einem anderen Nutzer"} ·
+      <button type="button" class="link-btn" disabled={leaving} onclick={() => (confirmingLeave ? leave() : (confirmingLeave = true))}>
+        {confirmingLeave ? "Wirklich verlassen?" : "Plan verlassen"}
+      </button>
+    </p>
+  {/if}
+{/snippet}
 
 {#snippet testsCard(p: ProgramTree)}
   {#if p.tests.length}
@@ -64,8 +86,8 @@
 <div class="page" class:wide>
   <TopBar label="Pläne" backLabel="Zu den Plänen" onback={() => goUp(paths.programs())}>
     {#snippet actions()}
-      {#if wide && program}
-        <button type="button" class="btn" onclick={() => (selected = { kind: "program" })}><Icon name="pencil" />Programm</button>
+      {#if program}
+        <button type="button" class="btn" onclick={() => (wide ? (selected = { kind: "program" }) : openSheet({ kind: "plan-edit", target: { kind: "program" } }))}><Icon name="pencil" />Programm</button>
       {/if}
     {/snippet}
   </TopBar>
@@ -73,6 +95,7 @@
     <div class="split">
       <main class="plan">
         <h1 class="display page-title">{program.name}</h1>
+        {@render sharedLine(program)}
         <p class="muted summary">{program.done} von {program.total} Einheiten{program.next ? "" : " · abgeschlossen"}</p>
         {#each clusters as cluster, c (c)}
           {#if cluster.phase}
@@ -147,6 +170,7 @@
   {:else if program}
     <main>
       <h1 class="display page-title">{program.name}</h1>
+      {@render sharedLine(program)}
       <p class="muted summary">
         {program.done} von {program.total} Einheiten{program.next ? "" : " · abgeschlossen"}
       </p>
@@ -196,6 +220,14 @@
     <main><p class="muted">Lade …</p></main>
   {/if}
 </div>
+
+{#if app.sheet.kind === "plan-edit" && program && !wide}
+  <Sheet title="Plan bearbeiten">
+    {#key JSON.stringify(app.sheet.target)}
+      <PlanEditor {program} target={app.sheet.target} onprogram={(p) => (program = p)} onselect={(t) => (t ? openSheet({ kind: "plan-edit", target: t }) : closeSheet())} />
+    {/key}
+  </Sheet>
+{/if}
 
 <style>
   .page.wide {
@@ -329,6 +361,12 @@
   .summary {
     margin: 0;
     padding: 0 4px;
+  }
+  .shared {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0 4px;
   }
   .phase {
     margin: 12px 4px 0;

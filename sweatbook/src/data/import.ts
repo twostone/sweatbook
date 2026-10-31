@@ -17,7 +17,7 @@ export type ImportLine =
       distance_m?: Range;
       duration_s?: Range;
       max?: boolean;
-      load?: { kg: number } | { percent: number; of: string };
+      load?: { kg: number; kg_female?: number } | { percent: number; of: string };
       test?: TestKind;
       rest?: string;
       note?: string;
@@ -117,6 +117,7 @@ function toInput(line: ImportLine, exerciseId: (key: string) => string): PlanIte
     duration_s: null,
     to_max: false,
     load_kg: null,
+    load_kg_female: null,
     load_pct: null,
     load_ref_exercise_id: null,
     test_kind: null,
@@ -135,6 +136,7 @@ function toInput(line: ImportLine, exerciseId: (key: string) => string): PlanIte
     duration_s: line.duration_s ?? null,
     to_max: line.max ?? false,
     load_kg: load && "kg" in load ? load.kg : null,
+    load_kg_female: load && "kg" in load ? (load.kg_female ?? null) : null,
     load_pct: load && "percent" in load ? load.percent : null,
     load_ref_exercise_id: load && "percent" in load ? exerciseId(load.of) : null,
     test_kind: line.test ?? null,

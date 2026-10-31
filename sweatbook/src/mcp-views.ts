@@ -41,7 +41,7 @@ export function planText(item: PlanItem): string {
   const count = item.sets ? `${rangeText(item.sets)}×` : "";
   const value = item.to_max ? "max" : item.reps ? rangeText(item.reps) : item.distance_m ? `${rangeText(item.distance_m)} m` : item.duration_s ? `${rangeText(item.duration_s)} s` : "";
   const share = item.load_pct !== null && item.load_ref ? `${num(item.load_pct)} % of ${item.load_ref.name}` : null;
-  const load = item.weight_kg !== null ? ` @ ${num(item.weight_kg)} kg${share ? ` (${share})` : ""}` : item.load_kg !== null ? ` @ ${num(item.load_kg)} kg` : share ? ` @ ${share} (no 1RM yet)` : "";
+  const load = item.weight_kg !== null ? ` @ ${num(item.weight_kg)} kg${share ? ` (${share})` : ""}` : share ? ` @ ${share} (no 1RM yet)` : "";
   const test = item.test_kind === "one_rm" ? "1RM test" : item.test_kind === "best" ? "best-performance test" : null;
   return [`${count}${value}${load}`.trim(), item.label, item.rest ? `rest ${item.rest}` : null, test].filter((p) => p).join("; ");
 }

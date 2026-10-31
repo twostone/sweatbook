@@ -51,7 +51,7 @@ test("a typo names the field", () => {
 test("formFromItem turns a stored line back into the form", () => {
   const item: PlanItem = {
     id: "i", position: 0, exercise: squat, label: "Pause", sets: [4, 4], reps: [3, 5], distance_m: null, duration_s: null,
-    to_max: false, load_kg: null, load_pct: 82.5, load_ref: squat, weight_kg: 100, test_kind: "one_rm", rest: "3 min", note: null,
+    to_max: false, load_kg: null, load_kg_female: null, load_pct: 82.5, load_ref: squat, weight_kg: 100, test_kind: "one_rm", rest: "3 min", note: null,
   };
   const form = formFromItem(item);
   assert.deepEqual([form.sets, form.reps, form.loadKind, form.loadPct, form.testKind, form.note], ["4", "3–5", "pct", "82,5", "one_rm", ""]);
@@ -62,4 +62,17 @@ test("moved swaps with the neighbour and stops at the ends", () => {
   assert.deepEqual(moved(["a", "b", "c"], "b", 1), ["a", "c", "b"]);
   assert.deepEqual(moved(["a", "b", "c"], "a", -1), ["a", "b", "c"]);
   assert.deepEqual(moved(["a", "b", "c"], "c", 1), ["a", "b", "c"]);
+});
+
+test("the women's weight is sent with a fixed load only, empty stays null", () => {
+  const withBoth = itemBody({ ...emptyForm(squat), reps: "5", loadKind: "kg", loadKg: "24", loadKgFemale: "16,5" });
+  assert.ok(!("invalid" in withBoth));
+  assert.deepEqual([withBoth.load_kg, withBoth.load_kg_female], [24, 16.5]);
+  const without = itemBody({ ...emptyForm(squat), reps: "5", loadKind: "kg", loadKg: "24" });
+  assert.ok(!("invalid" in without));
+  assert.equal(without.load_kg_female, null);
+  const pct = itemBody({ ...emptyForm(squat), reps: "5", loadKind: "pct", loadPct: "80", loadRef: squat, loadKgFemale: "16" });
+  assert.ok(!("invalid" in pct));
+  assert.equal(pct.load_kg_female, null);
+  assert.deepEqual(itemBody({ ...emptyForm(squat), reps: "5", loadKind: "kg", loadKg: "24", loadKgFemale: "x" }), { invalid: "load" });
 });

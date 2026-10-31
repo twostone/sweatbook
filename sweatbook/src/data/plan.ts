@@ -1,6 +1,7 @@
 import type { Db } from "../db.ts";
 import { toBool } from "./common.ts";
 import { fieldsOf, type Field } from "./exercises.ts";
+import { userSex, type Sex } from "./users.ts";
 import { latestOneRm, testOfSets, type ExerciseTest, type TestKind } from "./tests.ts";
 
 // One line of a planned session: what to train, with targets. Everything planned is computed when shown, never
@@ -18,10 +19,11 @@ export type PlanItem = {
   distance_m: Range | null;
   duration_s: Range | null;
   to_max: boolean;
-  load_kg: number | null; // fixed load
+  load_kg: number | null; // fixed load (the default, men's)
+  load_kg_female: number | null; // optional separate fixed load for women
   load_pct: number | null; // or percent of the 1RM of load_ref …
   load_ref: ExerciseRef | null;
-  weight_kg: number | null; // … which gives this weight (rounded), when a 1RM is known
+  weight_kg: number | null; // … which gives this weight (rounded), when a 1RM is known; for a fixed load the one that fits the user's sex
   test_kind: TestKind | null;
   rest: string | null;
   note: string | null;
@@ -42,6 +44,7 @@ export type PlanItemRow = {
   duration_max_s: number | null;
   to_max: number;
   load_kg: number | null;
+  load_kg_female: number | null;
   load_pct: number | null;
   load_ref_exercise_id: string | null;
   test_kind: TestKind | null;
@@ -50,7 +53,7 @@ export type PlanItemRow = {
 };
 
 export const ITEM_COLUMNS =
-  "id, position, exercise_id, label, sets_min, sets_max, reps_min, reps_max, distance_min_m, distance_max_m, duration_min_s, duration_max_s, to_max, load_kg, load_pct, load_ref_exercise_id, test_kind, rest, note";
+  "id, position, exercise_id, label, sets_min, sets_max, reps_min, reps_max, distance_min_m, distance_max_m, duration_min_s, duration_max_s, to_max, load_kg, load_kg_female, load_pct, load_ref_exercise_id, test_kind, rest, note";
 
 // Weights are plates: rounded to the nearest 2.5 kg.
 const PLATE_STEP_KG = 2.5;
@@ -62,10 +65,21 @@ const range = (min: number | null, max: number | null): Range | null => (min ===
 export class PlanContext {
   private exercises = new Map<string, ExerciseRef>();
   private oneRms = new Map<string, number | null>();
+  private sexLoaded = false;
+  private sexValue: Sex | null = null;
   constructor(
     readonly db: Db,
     readonly userId: string,
   ) {}
+
+  // The user's choice of which fixed weights plans show; read once.
+  get sex(): Sex | null {
+    if (!this.sexLoaded) {
+      this.sexValue = userSex(this.db, this.userId);
+      this.sexLoaded = true;
+    }
+    return this.sexValue;
+  }
 
   exercise(id: string | null): ExerciseRef | null {
     if (id === null) return null;
@@ -88,6 +102,10 @@ export class PlanContext {
   }
 }
 
+// The fixed load for this user: the women's weight if the user chose it and the line has one, else the default.
+const fixedLoad = (ctx: PlanContext, row: PlanItemRow): number | null =>
+  ctx.sex === "female" && row.load_kg_female !== null ? row.load_kg_female : row.load_kg;
+
 // `day` (YYYY-MM-DD) is the training day for a done session; null = the newest 1RM known (for sessions still to come).
 export function planItem(ctx: PlanContext, row: PlanItemRow, day: string | null): PlanItem {
   const oneRm = row.load_pct !== null && row.load_ref_exercise_id !== null ? ctx.oneRm(row.load_ref_exercise_id, day) : null;
@@ -102,9 +120,10 @@ export function planItem(ctx: PlanContext, row: PlanItemRow, day: string | null)
     duration_s: range(row.duration_min_s, row.duration_max_s),
     to_max: toBool(row.to_max),
     load_kg: row.load_kg,
+    load_kg_female: row.load_kg_female,
     load_pct: row.load_pct,
     load_ref: ctx.exercise(row.load_ref_exercise_id),
-    weight_kg: row.load_kg ?? (oneRm !== null ? roundToPlate((oneRm * row.load_pct!) / 100) : null),
+    weight_kg: fixedLoad(ctx, row) ?? (oneRm !== null ? roundToPlate((oneRm * row.load_pct!) / 100) : null),
     test_kind: row.test_kind,
     rest: row.rest,
     note: row.note,

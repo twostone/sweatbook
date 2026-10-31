@@ -15,11 +15,12 @@
     refreshSessions();
   });
 
-  // Next workout of every running program (a finished one shows "abgeschlossen" until it is archived on its page).
+  // Next workout of every followed program: joined and not archived. A shared program the user has not joined stays
+  // off the start page. A finished one shows "abgeschlossen" until it is archived on its page.
   let programs = $state<ProgramSummary[]>([]);
   $effect(() => {
     guard(async () => {
-      programs = (await api.listPrograms()).filter((p) => !p.archived);
+      programs = (await api.listPrograms()).filter((p) => p.joined && !p.archived);
     });
   });
 

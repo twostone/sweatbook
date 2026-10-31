@@ -2,7 +2,7 @@ import { McpServer, ResourceTemplate } from "@modelcontextprotocol/server";
 import * as z from "zod";
 import type { Db } from "./db.ts";
 import { addBlock, addExerciseToBlock, addRound, deleteBlock, removeBlockExercise, setBlockOrder, updateBlockExercise } from "./data/blocks.ts";
-import { ConflictError, ForbiddenError, InvalidError, NotFoundError } from "./data/common.ts";
+import { ConflictError, ForbiddenError, InvalidError, nameKey, NotFoundError } from "./data/common.ts";
 import { createExercise, deleteExercise, getExercise, listExercises, resolveExercise, updateExercise } from "./data/exercises.ts";
 import { importProgram } from "./data/import.ts";
 import { logSets } from "./data/log.ts";
@@ -62,6 +62,19 @@ function failure(err: unknown): Result {
 
 const OK = { ok: true as const };
 const asRange = (value: number | [number, number] | null | undefined) => (typeof value === "number" ? ([value, value] as [number, number]) : value);
+// start_week / start_label of join_program -> the planned session id (the outline of the shared program lists them in order).
+function startSessionId(db: Db, uid: string, a: { program_id: string; start_week?: number; start_label?: string }): string | undefined {
+  if (a.start_week === undefined) {
+    if (a.start_label !== undefined) throw new InvalidError("start_label needs start_week");
+    return undefined;
+  }
+  const outline = listPrograms(db, uid).find((p) => p.id === a.program_id)?.outline ?? [];
+  const week = outline.filter((e) => e.week === a.start_week);
+  const found = a.start_label === undefined ? week[0] : week.find((e) => nameKey(e.label) === nameKey(a.start_label!));
+  if (!found) throw new InvalidError(`no planned session found for week ${a.start_week}${a.start_label ? ` ${a.start_label}` : ""}; the outline of list_programs shows what exists`);
+  return found.id;
+}
+
 const MAX_SETS = 20;
 
 // "3 x" sets: expand `count`, then check against the HTTP API's own limits.
@@ -324,8 +337,22 @@ export function createMcpServer(db: Db, who: { userId: string; scope: TokenScope
     ({ program_id, ...patch }) => v.programView(updateProgram(db, uid, program_id, s.programPatch.parse(patch))),
     write,
   );
-  tool("join_program", "Join a program shared by somebody else, with your own start date.", { program_id: m.uuid("program"), start_date: m.isoDay.describe("Your Monday of week 1") }, m.programView, (a) =>
-    v.programView(joinProgram(db, uid, a.program_id, a.start_date)), write);
+  tool(
+    "join_program",
+    "Join a program shared by somebody else, with your own start date. Optionally start in the middle: the planned sessions before are marked skipped for you (list_programs shows the outline).",
+    {
+      program_id: m.uuid("program"),
+      start_date: m.isoDay.describe("Your Monday of week 1"),
+      start_week: z.number().int().min(1).optional().describe("Week number to start in; earlier planned sessions are skipped for you"),
+      start_label: z.string().trim().min(1).optional().describe("Label of the planned session to start with, e.g. 'B' (default: the first of start_week); needs start_week"),
+    },
+    m.programView,
+    (a) => {
+      const body = s.joinBody.parse({ start_date: a.start_date, start_planned_session_id: startSessionId(db, uid, a) });
+      return v.programView(joinProgram(db, uid, a.program_id, body.start_date, body.start_planned_session_id));
+    },
+    write,
+  );
   tool("leave_program", "Leave a joined program (not the owner).", { program_id: m.uuid("program") }, m.okView, (a) => {
     leaveProgram(db, uid, a.program_id);
     return OK;

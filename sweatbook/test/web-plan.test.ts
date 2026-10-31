@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { cardLine, currentWeek, findPlanned, formatPlanLine, clusterProgress, formatRange, groupWeeksByPhase, setProgress, weekDates } from "../web/src/logic/plan.ts";
+import { cardLine, currentWeek, joinStartDate, findPlanned, formatPlanLine, clusterProgress, formatRange, groupWeeksByPhase, setProgress, weekDates } from "../web/src/logic/plan.ts";
 import type { PlanItem, PlanWeek, SessionExercise } from "../web/src/types.ts";
 
 const item = (over: Partial<PlanItem>): PlanItem => ({
@@ -105,4 +105,11 @@ test("findPlanned: the planned session and its week", () => {
   const weeks: PlanWeek[] = [{ id: "w", number: 8, phase_id: null, phase: null, deload: false, sessions: [session] }];
   assert.equal(findPlanned(weeks, "s1")?.week.number, 8);
   assert.equal(findPlanned(weeks, "nope"), null);
+});
+
+test("joinStartDate: week 1 starts on the coming Monday, week N makes week N the current one", () => {
+  const wednesday = new Date(2026, 9, 28, 10, 0); // 2026-10-28
+  assert.equal(joinStartDate(1, wednesday), "2026-11-02");
+  assert.equal(joinStartDate(3, wednesday), "2026-10-12"); // Monday of this week minus 14 days
+  assert.equal(joinStartDate(2, new Date(2026, 9, 25)), "2026-10-12"); // a Sunday belongs to the week of Monday the 19th
 });

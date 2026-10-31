@@ -126,6 +126,7 @@ export const programListItem = (p: ProgramSummary): View<typeof schemas.programL
   joined: p.joined,
   owner_name: p.owner_name,
   progress: { done: p.done, total: p.total },
+  outline: p.outline,
   next: p.next && { planned_session_id: p.next.planned_session_id, week: p.next.week, phase: p.next.phase, label: p.next.label },
 });
 

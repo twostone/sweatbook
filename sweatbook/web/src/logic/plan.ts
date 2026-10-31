@@ -116,3 +116,17 @@ export function formatTest(t: ExerciseTest): string {
   const values = [t.reps !== null ? `${t.reps} Wdh.` : "", t.distance_m !== null ? `${t.distance_m} m` : "", t.duration_s !== null ? formatDuration(t.duration_s) : ""].filter(Boolean);
   return [weight, ...values].filter(Boolean).join(" × ");
 }
+
+const isoDay = (d: Date): string => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+// Start date (Monday of week 1) for joining a program at week N: week 1 starts on the coming Monday, a later entry
+// shifts the start back so that week N is the current week.
+export function joinStartDate(entryWeek: number, today = new Date()): string {
+  const d = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  if (entryWeek <= 1) {
+    d.setDate(d.getDate() + ((8 - d.getDay()) % 7 || 7));
+  } else {
+    d.setDate(d.getDate() - ((d.getDay() + 6) % 7) - (entryWeek - 1) * 7);
+  }
+  return isoDay(d);
+}

@@ -147,7 +147,8 @@ export const createProgram = (name: string, startDate: string) =>
   request<ProgramTree>("POST", "api/programs", { name, start_date: startDate });
 export const updateProgram = (id: string, patch: { name?: string; shared?: boolean; start_date?: string; archived?: boolean }) =>
   request<ProgramTree>("PATCH", `api/programs/${enc(id)}`, patch);
-export const joinProgram = (id: string, startDate: string) => request<ProgramTree>("POST", `api/programs/${enc(id)}/join`, { start_date: startDate });
+export const joinProgram = (id: string, startDate: string, startPlannedSessionId?: string) =>
+  request<ProgramTree>("POST", `api/programs/${enc(id)}/join`, { start_date: startDate, start_planned_session_id: startPlannedSessionId });
 export const leaveProgram = (id: string) => request<void>("DELETE", `api/programs/${enc(id)}/membership`);
 export const deleteProgram = (id: string) => request<void>("DELETE", `api/programs/${enc(id)}`);
 // copyOf: the week to copy (its sessions and lines); without it the week is empty.

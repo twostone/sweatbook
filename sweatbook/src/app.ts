@@ -53,6 +53,7 @@ import {
   planItemPatch,
   planItemBody,
   day,
+  joinBody,
   programBody,
   programPatch,
   weekBody,
@@ -225,9 +226,10 @@ export function createApp(db: Db, opts: AppOptions = {}) {
   app.patch("/api/programs/:id", zValidator("param", idParam), zValidator("json", programPatch), (c) =>
     c.json(updateProgram(db, c.get("user").id, c.req.valid("param").id, c.req.valid("json"))),
   );
-  app.post("/api/programs/:id/join", zValidator("param", idParam), zValidator("json", z.object({ start_date: day })), (c) =>
-    c.json(joinProgram(db, c.get("user").id, c.req.valid("param").id, c.req.valid("json").start_date)),
-  );
+  app.post("/api/programs/:id/join", zValidator("param", idParam), zValidator("json", joinBody), (c) => {
+    const body = c.req.valid("json");
+    return c.json(joinProgram(db, c.get("user").id, c.req.valid("param").id, body.start_date, body.start_planned_session_id));
+  });
   app.delete("/api/programs/:id/membership", zValidator("param", idParam), (c) => {
     leaveProgram(db, c.get("user").id, c.req.valid("param").id);
     return c.body(null, 204);

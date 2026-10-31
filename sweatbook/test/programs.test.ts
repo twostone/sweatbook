@@ -381,3 +381,39 @@ test("me: sex can be set and cleared, other values are refused", async () => {
   assert.equal((await call("PATCH", "/api/me", { sex: "x" })).status, 400);
   assert.equal((await call("PATCH", "/api/me", {})).status, 400);
 });
+
+test("sharing: joining with a start skips the earlier planned sessions for the joiner only", async () => {
+  const { call, as } = setup();
+  const { program } = await plan(call);
+  const withWeek2 = (await call("POST", `/api/programs/${program.id}/weeks`, { copy_of: program.weeks[0].id })).json;
+  const ids: string[] = withWeek2.weeks.flatMap((w: any) => w.sessions.map((s: any) => s.id)); // A1, B1, A2, B2
+  assert.equal(ids.length, 4);
+  const ben = as("ha-user-2");
+  await call("PATCH", `/api/programs/${program.id}`, { shared: true });
+
+  const offered = (await ben("GET", "/api/programs")).json[0];
+  assert.deepEqual(offered.outline.map((e: any) => [e.week, e.label]), [[1, "A"], [1, "B"], [2, "A"], [2, "B"]]);
+  assert.equal((await call("GET", "/api/programs")).json[0].outline, null);
+
+  // an unknown id and a planned session of another program are 400, and nothing is joined
+  const foreign = (await call("POST", "/api/programs", { name: "Anderes", start_date: "2026-08-31" })).json;
+  const foreignWeek = (await call("POST", `/api/programs/${foreign.id}/weeks`, {})).json.weeks[0];
+  const foreignSession = (await call("POST", `/api/weeks/${foreignWeek.id}/sessions`, { label: "X" })).json.weeks[0].sessions[0];
+  for (const bad of ["00000000-0000-4000-8000-000000000000", foreignSession.id]) {
+    assert.equal((await ben("POST", `/api/programs/${program.id}/join`, { start_date: "2026-11-02", start_planned_session_id: bad })).status, 400);
+  }
+  assert.equal((await ben("GET", `/api/programs/${program.id}`)).status, 404);
+
+  const joined = (await ben("POST", `/api/programs/${program.id}/join`, { start_date: "2026-10-26", start_planned_session_id: ids[2] })).json;
+  assert.deepEqual(joined.weeks.flatMap((w: any) => w.sessions.map((s: any) => s.state)), ["skipped", "skipped", "open", "open"]);
+  assert.equal(joined.weeks[0].sessions[0].skip_note, "vor dem Beitritt");
+  assert.equal(joined.next.planned_session_id, ids[2]);
+  assert.equal(joined.outline, null);
+  const owner = (await call("GET", `/api/programs/${program.id}`)).json;
+  assert.deepEqual(owner.weeks.flatMap((w: any) => w.sessions.map((s: any) => s.state)), ["open", "open", "open", "open"]);
+
+  // joining again changes nothing
+  const again = (await ben("POST", `/api/programs/${program.id}/join`, { start_date: "2026-12-07", start_planned_session_id: ids[3] })).json;
+  assert.equal(again.start_date, "2026-10-26");
+  assert.equal(again.next.planned_session_id, ids[2]);
+});

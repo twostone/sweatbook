@@ -238,3 +238,28 @@ test("mcp: a plan line with separate weights shows the weight for the token's us
   const line = (await call(t, "add_plan_item", { planned_session_id: plannedId, exercise: "Kettlebell Swing", sets: 3, reps: 10, load_kg: 24, load_kg_female: 16 })).data;
   assert.equal(line.weeks[0].sessions[0].rows[0].text, "3×10 @ 16 kg");
 });
+
+test("mcp: join_program with start_week and start_label skips the earlier planned sessions", async () => {
+  const { db, anna, ben, call } = setup();
+  const a = createToken(db, anna, { name: "a", scope: "write" }).token;
+  const b = createToken(db, ben, { name: "b", scope: "write" }).token;
+  let program = (await call(a, "create_program", { name: "Plan", start_date: "2026-11-02" })).data;
+  for (let n = 1; n <= 2; n++) {
+    program = (await call(a, "add_week", { program_id: program.id })).data;
+    const week = program.weeks[n - 1];
+    await call(a, "add_planned_session", { week_id: week.id, label: "A" });
+    await call(a, "add_planned_session", { week_id: week.id, label: "B" });
+  }
+  await call(a, "update_program", { program_id: program.id, shared: true });
+  const listed = await call(b, "list_programs");
+  const offered = listed.data.programs[0];
+  assert.deepEqual(offered.outline.map((e: any) => [e.week, e.label]), [[1, "A"], [1, "B"], [2, "A"], [2, "B"]]);
+
+  const missing = await call(b, "join_program", { program_id: program.id, start_date: "2026-10-26", start_week: 2, start_label: "C" });
+  assert.equal(missing.isError, true);
+  assert.equal((await call(b, "join_program", { program_id: program.id, start_date: "2026-10-26", start_label: "A" })).isError, true);
+
+  const joined = (await call(b, "join_program", { program_id: program.id, start_date: "2026-10-26", start_week: 2, start_label: "b" })).data;
+  assert.deepEqual(joined.weeks.flatMap((w: any) => w.sessions.map((s: any) => s.state)), ["skipped", "skipped", "skipped", "open"]);
+  assert.deepEqual([joined.next.week, joined.next.label], [2, "B"]);
+});

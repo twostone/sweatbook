@@ -7,7 +7,7 @@
   import { formatKg } from "./logic/format";
   import { weekDates } from "./logic/plan";
   import { goUp, paths } from "./router.svelte";
-  import { guard } from "./store.svelte";
+  import { closeSheetThen, guard } from "./store.svelte";
   import type { PlanItem, PlannedSession, PlanPhase, PlanWeek, ProgramTree } from "./types";
 
   // Edits what the target names: the program, a phase, a week, a planned session or one line. Every change answers with the whole
@@ -45,6 +45,8 @@
   });
 
   let busy = $state(false);
+  // After leaving or deleting the program the page is gone: close a sheet first, then go back to the list.
+  const toList = () => closeSheetThen(() => goUp(paths.programs()));
   let confirming = $state(false); // the delete button asks once more
   async function run(change: () => Promise<ProgramTree>, after?: () => void) {
     busy = true;
@@ -143,7 +145,7 @@
         busy = true;
         const ok = await guard(() => api.deleteProgram(program.id));
         busy = false;
-        if (ok) goUp(paths.programs());
+        if (ok) toList();
       })}
     {:else}
       <p class="muted">Geteilt von {program.owner_name ?? "einem anderen Nutzer"}.</p>
@@ -151,7 +153,7 @@
         busy = true;
         const ok = await guard(() => api.leaveProgram(program.id));
         busy = false;
-        if (ok) goUp(paths.programs());
+        if (ok) toList();
       })}
     {/if}
   {:else if target.kind === "new-phase"}

@@ -121,7 +121,7 @@ const nextWorkout = z.object({ planned_session_id: text, week: z.number(), phase
 const programBase = {
   id: text,
   name: text,
-  start_date: text.describe("Monday of week 1 (your own)"),
+  start_date: maybeText.describe("Monday of week 1 (your own); null until you joined"),
   archived: z.boolean(),
   shared: z.boolean(),
   owned: z.boolean().describe("You created it: only you rename, share and delete it"),
@@ -129,6 +129,10 @@ const programBase = {
   owner_name: maybeText,
   progress: z.object({ done: z.number(), total: z.number() }).describe("Planned sessions done or skipped / all"),
   next: nextWorkout.nullable().describe("The first open planned session"),
+  outline: z
+    .array(z.object({ id: text, week: z.number(), label: text }))
+    .nullable()
+    .describe("Planned sessions in order (week, label) of a program you have not joined yet, to choose where to start; null once joined"),
 };
 export const programListItem = z.object(programBase);
 export const programView = z.object({

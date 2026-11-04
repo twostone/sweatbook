@@ -20,8 +20,10 @@ Voraussetzung: Home Assistant mit App-Store (Home Assistant OS oder Supervised),
    eintragen:
 
    ```
-   https://github.com/twostone/sweatbook
+   https://github.com/twostone/hassio-apps
    ```
+
+   Das ist das gemeinsame Repository aller twostone-Apps; es wird nach jedem Release automatisch aktualisiert.
 
 2. „Sweatbook“ installieren und starten, danach „In Seitenleiste anzeigen“ aktivieren.
 

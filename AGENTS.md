@@ -15,8 +15,9 @@ ausdrücklich gebraucht wird. Aufbau, Pipeline und viele Regeln sind von [twosto
 repository.yaml          HA-App-Repository
 README.md, LICENSE       Installation, Entwicklung (das Repository ist öffentlich), Apache-2.0
 release-please-config.json, .release-please-manifest.json   Release-Automatik (Version, Changelog)
-.github/workflows/       ci.yml (Tests, Docker-Build, Smoke-Test), release.yml (Release Please, Image), lint-pr-title.yml
-renovate.json            Renovate: Actions, npm, Node und Docker-Basisimage (gruppierte PRs)
+.github/workflows/       ci.yml (→ hassio-workflows app-ci), release.yml (Release Please, Image + Dispatch an hassio-apps), lint-pr-title.yml
+renovate.json            Renovate: Preset aus hassio-workflows + projektspezifische Regeln
+scripts/smoke.sh         Smoke-Test des Images (von der CI aufgerufen)
 sweatbook/               die App (Docker-Build-Kontext)
   config.yaml            App-Konfiguration (Version pflegt Release Please)
   icon.png               Icon im App-Store (128×128 PNG, aus web/static/favicon.svg erzeugt)
@@ -204,7 +205,11 @@ UI). Ein `read`-Token bekommt nur Lese-Tools. Tokens verwaltet man über `GET/PO
 ## CI und Releases
 
 Wie meal-planner (Details dort in AGENTS.md): Conventional Commits, Release Please, „Mergen des Release-PR ist der
-Release“, danach in `release.yml` Tests und Image `ghcr.io/twostone/sweatbook:<version>` (amd64, arm64). Das
+Release“, danach in `release.yml` Tests und Image `ghcr.io/twostone/sweatbook:<version>` (amd64, arm64), zuletzt ein
+`repository_dispatch` an [twostone/hassio-apps](https://github.com/twostone/hassio-apps) (Secret `DISPATCH_TOKEN`), wo der
+`repository-updater` die Release ins Verzeichnis `sweatbook/` übernimmt. CI, Publish und PR-Titel-Lint sind die gemeinsamen
+Workflows aus [twostone/hassio-workflows](https://github.com/twostone/hassio-workflows); App-Spezifisches steht in
+`scripts/smoke.sh`. Das
 ghcr-Paket muss **öffentlich** sein, sonst kann Home Assistant es nicht laden. `image:` in `config.yaml` ohne Tag.
 Actions nur mit vollem Commit-SHA pinnen. Voraussetzung im Repository: Einstellungen → Actions → General → „Allow GitHub
 Actions to create and approve pull requests“.

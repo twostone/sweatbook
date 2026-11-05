@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.10.1](https://github.com/twostone/sweatbook/compare/v1.10.0...v1.10.1) (2026-11-05)
+
+
+### Behoben
+
+* bei SIGTERM sauber beenden (Exit 0), damit der Supervisor "stopped" statt "error" zeigt ([#45](https://github.com/twostone/sweatbook/issues/45)) ([0a65114](https://github.com/twostone/sweatbook/commit/0a65114437e14364544daf572de5cede18f2d509))
+
 ## [1.10.0](https://github.com/twostone/sweatbook/compare/v1.9.0...v1.10.0) (2026-10-31)
 
 

@@ -6,6 +6,7 @@ import { createApp } from "./app.ts";
 import { openDb, schemaVersion } from "./db.ts";
 import { logger, resolveLogLevel, setLogLevel } from "./log.ts";
 import { readAddonOptions } from "./options.ts";
+import { installShutdownHandlers } from "./shutdown.ts";
 
 // The app's options (Supervisor writes /data/options.json); `log_level` beats LOG_LEVEL, else info.
 const log = logger("server");
@@ -31,4 +32,7 @@ const app = createApp(db, { allowedIp: process.env.INGRESS_ONLY_IP, mcpEnabled: 
 // API routes are registered first; anything else is the built frontend (npm run build).
 app.use("/*", serveStatic({ root: "./dist" }));
 const port = Number(process.env.PORT ?? 8099);
-serve({ fetch: app.fetch, port }, (i) => log.info("listening", { port: i.port }));
+const server = serve({ fetch: app.fetch, port }, (i) => log.info("listening", { port: i.port }));
+
+// SIGTERM from `docker stop` / the Supervisor: stop accepting requests, close the database, exit 0 (not "error").
+installShutdownHandlers({ servers: [server], cleanup: () => db.close() });

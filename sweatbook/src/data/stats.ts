@@ -1,5 +1,6 @@
 import type { Db } from "../db.ts";
-import { getExercise } from "./exercises.ts";
+import { getExercise, muscleMap } from "./exercises.ts";
+import { muscleSummary, noMuscles, type MuscleSummary } from "./muscles.ts";
 
 // Evaluations over the logged sets of one user, read-only. Computed when asked, nothing is stored.
 export const DEFAULT_WEEKS = 4;
@@ -83,12 +84,16 @@ export type TrainingWeek = {
   sets: number;
   volume_kg: number;
   exercises: { exercise_id: string; name: string; sets: number; volume_kg: number }[];
+  muscles: MuscleSummary;
 };
 
-// Per week (oldest first, empty weeks included so gaps show): sessions, sets, volume, and the same per exercise.
+// Per week (oldest first, empty weeks included so gaps show): sessions, sets, volume, the same per exercise, and weighted
+// sets per muscle group.
 export function trainingSummary(db: Db, userId: string, opts: { weeks?: number; now?: Date } = {}): { weeks: TrainingWeek[] } {
   const starts = weekStarts(opts.weeks ?? DEFAULT_WEEKS, opts.now ?? new Date());
   const rows = rowsSince(db, userId, starts[0]!);
+  const muscles = muscleMap(db);
+  const musclesOf = (id: string) => muscles.get(id) ?? noMuscles();
   return {
     weeks: starts.map((week_start) => {
       const inWeek = rows.filter((r) => mondayOf(new Date(r.started_at)) === week_start);
@@ -102,6 +107,7 @@ export function trainingSummary(db: Db, userId: string, opts: { weeks?: number; 
         exercises: [...byExercise.entries()]
           .map(([exercise_id, sets]) => ({ exercise_id, name: sets[0]!.name, sets: sets.length, volume_kg: volumeOf(sets) }))
           .sort((a, b) => b.sets - a.sets || a.name.localeCompare(b.name, "de")),
+        muscles: muscleSummary(inWeek, musclesOf),
       };
     }),
   };

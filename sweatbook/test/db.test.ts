@@ -179,10 +179,27 @@ test("migration v8: a v7 database gets load_kg_female and sex, existing data sta
   db.exec("PRAGMA foreign_keys = ON");
   migrate(db, MIGRATIONS.slice(0, 7));
   db.prepare("INSERT INTO app_user (id, ha_user_id, created_at) VALUES ('u', 'ha', 'x')").run();
-  migrate(db);
+  migrate(db, MIGRATIONS.slice(0, 8));
   assert.equal(schemaVersion(db), 8);
   assert.equal(db.prepare("SELECT sex FROM app_user WHERE id = 'u'").get()?.sex, null);
   db.prepare("UPDATE app_user SET sex = 'female' WHERE id = 'u'").run();
   assert.throws(() => db.prepare("UPDATE app_user SET sex = 'x' WHERE id = 'u'").run());
   assert.equal(db.prepare("SELECT count(*) AS n FROM planned_item WHERE load_kg_female IS NOT NULL").get()?.n, 0);
+});
+
+test("migration v9: a v8 database gets exercise_muscle, one role per group, gone with the exercise", () => {
+  const db = new DatabaseSync(":memory:");
+  db.exec("PRAGMA foreign_keys = ON");
+  migrate(db, MIGRATIONS.slice(0, 8));
+  db.prepare("INSERT INTO app_user (id, ha_user_id, created_at) VALUES ('u', 'ha', 'x')").run();
+  db.prepare("INSERT INTO exercise (id, user_id, name, has_weight, has_reps, has_distance, has_duration, archived, created_at) VALUES ('e', 'u', 'Bank', 1, 1, 0, 0, 0, 'x')").run();
+  migrate(db);
+  assert.equal(schemaVersion(db), 9);
+  assert.equal(db.prepare("SELECT name FROM exercise WHERE id = 'e'").get()?.name, "Bank");
+  const insert = db.prepare("INSERT INTO exercise_muscle (exercise_id, muscle, role) VALUES (?, ?, ?)");
+  insert.run("e", "chest", "primary");
+  assert.throws(() => insert.run("e", "chest", "secondary"));
+  assert.throws(() => insert.run("e", "triceps", "main"));
+  db.prepare("DELETE FROM exercise WHERE id = 'e'").run();
+  assert.equal(db.prepare("SELECT count(*) AS n FROM exercise_muscle").get()?.n, 0);
 });

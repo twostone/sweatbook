@@ -2,8 +2,13 @@
   "program": { "name": "Beispiel-Plan (3 Wochen)", "start_date": "2027-01-04", "start_week": 2 },
   "exercises": [
     { "key": "bank", "name": "Bankziehen", "fields": ["weight", "reps"] },
-    { "key": "rudern", "name": "Langhantelrudern vorgebeugt", "fields": ["weight", "reps"] },
-    { "key": "hang", "name": "Dead Hang", "fields": ["weight", "duration"] },
+    {
+      "key": "rudern",
+      "name": "Langhantelrudern vorgebeugt",
+      "fields": ["weight", "reps"],
+      "muscles": { "primary": ["upper_back", "lats"], "secondary": ["rear_delts", "biceps", "lower_back"] }
+    },
+    { "key": "hang", "name": "Dead Hang", "fields": ["weight", "duration"], "muscles": { "primary": ["forearms"], "secondary": ["lats"] } },
     { "key": "farmer", "name": "Farmer's Walk", "fields": ["weight", "distance", "duration"] }
   ],
   "tests": [

@@ -4,8 +4,9 @@
   import * as api from "./api";
   import { ApiError } from "./api";
   import { addAlias, similarExercises } from "./logic/catalog";
+  import { cycleRole, MUSCLE_LABELS, MUSCLES, roleOf } from "./logic/muscles";
   import { guard } from "./store.svelte";
-  import { VALUE_FIELDS, type Exercise, type ExerciseInput, type Field } from "./types";
+  import { VALUE_FIELDS, type Exercise, type ExerciseInput, type Field, type Muscles } from "./types";
 
   // The fields of a catalog exercise, for "Übung anlegen" and the detail page. Warns about similar names while typing;
   // an exact clash is refused by the server (409 with taken_by) and shown at the name.
@@ -31,6 +32,8 @@
   let aliases = $state<string[]>(start.aliases ?? []);
   let aliasText = $state("");
   let note = $state(start.note ?? "");
+  let muscles = $state<Muscles>({ primary: [...(start.muscles?.primary ?? [])], secondary: [...(start.muscles?.secondary ?? [])] });
+  const ROLE_TEXT = { primary: "primär", secondary: "sekundär" } as const;
   let catalog = $state<Exercise[]>([]);
   let takenBy = $state<string | null>(null);
   let busy = $state(false);
@@ -73,7 +76,7 @@
     fieldInUse = null;
     await guard(async () => {
       try {
-        await onsave({ name: name.trim(), fields: $state.snapshot(fields), aliases: $state.snapshot(aliases), note: note.trim() });
+        await onsave({ name: name.trim(), fields: $state.snapshot(fields), aliases: $state.snapshot(aliases), note: note.trim(), muscles: $state.snapshot(muscles) });
       } catch (err) {
         // A taken name and a field that still holds values are shown in place; anything else goes to the error bar.
         if (err instanceof ApiError && err.status === 409 && typeof err.detail.taken_by === "string") takenBy = err.detail.taken_by;
@@ -122,6 +125,19 @@
       {:else}
         <p class="muted small">Gewicht leer heißt Körpergewicht. Felder mit Werten in Sätzen bleiben.</p>
       {/if}
+    </fieldset>
+
+    <fieldset>
+      <legend class="label">Muskelgruppen</legend>
+      <p class="muted small legend-hint">Tippen wechselt: <span class="mark primary" aria-hidden="true"></span> primär → <span class="mark secondary" aria-hidden="true"></span> sekundär → aus</p>
+      <div class="muscles">
+        {#each MUSCLES as m (m)}
+          {@const role = roleOf(muscles, m)}
+          <button type="button" class="muscle {role ?? ''}" aria-label="{MUSCLE_LABELS[m]}: {role ? ROLE_TEXT[role] : 'nicht beansprucht'}" onclick={() => (muscles = cycleRole(muscles, m))}>
+            <span class="mark {role ?? ''}" aria-hidden="true"></span>{MUSCLE_LABELS[m]}
+          </button>
+        {/each}
+      </div>
     </fieldset>
 
     <label class="label" for="exercise-alias">Aliase</label>
@@ -209,6 +225,52 @@
   .small {
     font-size: 13px;
     margin: 8px 0 0;
+  }
+  .legend-hint {
+    margin: 0 0 8px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+  }
+  .muscles {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .muscle {
+    min-height: var(--tap);
+    padding: 0 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border: 1.5px solid var(--line-strong);
+    border-radius: 999px;
+    background: transparent;
+    font-weight: 600;
+  }
+  .muscle.primary {
+    background: var(--strong);
+    border-color: var(--strong);
+    color: var(--on-strong);
+  }
+  .muscle.secondary {
+    border-color: var(--strong);
+  }
+  /* filled dot = primary, ring = secondary, faint ring = off: the state reads without colour */
+  .mark {
+    width: 10px;
+    height: 10px;
+    flex: none;
+    border-radius: 50%;
+    border: 1.5px solid var(--line-strong);
+  }
+  .mark.primary {
+    background: currentColor;
+    border-color: currentColor;
+  }
+  .mark.secondary {
+    border: 2.5px solid currentColor;
   }
   .warn {
     margin: 0;

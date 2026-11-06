@@ -8,6 +8,8 @@ import { addSets, type SetInput } from "../src/data/sets.ts";
 import { estimatedOneRm, exerciseProgress, topSet, trainingSummary, volumeOf } from "../src/data/stats.ts";
 import { resolveUser } from "../src/data/users.ts";
 import { NotFoundError } from "../src/data/common.ts";
+import { muscleSummary, noMuscles, replaceRoles, type Muscles } from "../src/data/muscles.ts";
+import { updateExercise } from "../src/data/exercises.ts";
 
 const NOW = new Date(2026, 9, 30, 12, 0, 0); // Friday, local time like the data
 // Local noon of a day, as the ISO string the API stores.
@@ -76,4 +78,46 @@ test("exerciseProgress: one entry per session, newest first, with the best estim
   // the catalog is shared, the sets are not
   assert.deepEqual(exerciseProgress(db, resolveUser(db, "ha-2", null).id, squat.id, { weeks: 4, now: NOW }).sessions, []);
   assert.throws(() => exerciseProgress(db, uid, "00000000-0000-4000-8000-000000000000"), NotFoundError);
+});
+
+test("muscleSummary: a set counts 1 per primary and 0.5 per secondary muscle, untagged sets are counted apart", () => {
+  const muscles = new Map<string, Muscles>([
+    ["bench", { primary: ["chest"], secondary: ["front_delts", "triceps"] }],
+    ["dips", { primary: ["triceps", "chest"], secondary: [] }],
+  ]);
+  const sets = [{ exercise_id: "bench" }, { exercise_id: "bench" }, { exercise_id: "dips" }, { exercise_id: "plank" }];
+  const summary = muscleSummary(sets, (id) => muscles.get(id) ?? noMuscles());
+  assert.deepEqual(summary, {
+    muscles: [
+      { muscle: "chest", sets: 3, primary_sets: 3, secondary_sets: 0 },
+      { muscle: "triceps", sets: 2, primary_sets: 1, secondary_sets: 2 },
+      { muscle: "front_delts", sets: 1, primary_sets: 0, secondary_sets: 2 },
+    ],
+    untagged_sets: 1,
+  });
+  assert.deepEqual(muscleSummary([], () => noMuscles()), { muscles: [], untagged_sets: 0 });
+});
+
+test("replaceRoles: a given list replaces its role and takes its groups from the other one", () => {
+  const current: Muscles = { primary: ["chest"], secondary: ["front_delts", "triceps"] };
+  assert.equal(replaceRoles(current), undefined);
+  assert.deepEqual(replaceRoles(current, ["chest", "triceps"]), { primary: ["chest", "triceps"], secondary: ["front_delts"] });
+  assert.deepEqual(replaceRoles(current, undefined, ["chest"]), { primary: [], secondary: ["chest"] });
+  assert.deepEqual(replaceRoles(current, [], []), { primary: [], secondary: [] });
+});
+
+test("trainingSummary: weighted sets per muscle group per week", () => {
+  const { db, uid, squat, dips, train } = setup();
+  updateExercise(db, uid, squat.id, { muscles: { primary: ["quads"], secondary: ["glutes"] } });
+  train(squat.id, at(10, 26), [{ weight_kg: 100, reps: 5 }, { weight_kg: 100, reps: 5 }]);
+  train(dips.id, at(10, 27), [{ reps: 10 }]);
+  const { weeks } = trainingSummary(db, uid, { weeks: 2, now: NOW });
+  assert.deepEqual(weeks[0]!.muscles, { muscles: [], untagged_sets: 0 });
+  assert.deepEqual(weeks[1]!.muscles, {
+    muscles: [
+      { muscle: "quads", sets: 2, primary_sets: 2, secondary_sets: 0 },
+      { muscle: "glutes", sets: 1, primary_sets: 0, secondary_sets: 2 },
+    ],
+    untagged_sets: 1,
+  });
 });

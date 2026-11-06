@@ -221,6 +221,16 @@ export const MIGRATIONS: readonly Migration[] = [
   ALTER TABLE planned_item ADD COLUMN load_kg_female REAL CHECK (load_kg_female >= 0);
   ALTER TABLE app_user ADD COLUMN sex TEXT CHECK (sex IN ('male', 'female'));
   `,
+  // v9: the muscle groups an exercise works, primary or secondary. No CHECK on the group name: the list lives in the app
+  // (data/muscles.ts), so a new group needs no table rebuild. One role per group and exercise (the primary key).
+  `
+  CREATE TABLE exercise_muscle (
+    exercise_id TEXT NOT NULL REFERENCES exercise(id) ON DELETE CASCADE,
+    muscle      TEXT NOT NULL,
+    role        TEXT NOT NULL CHECK (role IN ('primary', 'secondary')),
+    PRIMARY KEY (exercise_id, muscle)
+  ) STRICT;
+  `,
 ];
 
 // exercise_test gets its owner (it was the owner of the exercise); nullable because SQLite cannot add a NOT NULL column

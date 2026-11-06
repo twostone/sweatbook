@@ -111,6 +111,13 @@ test("mcp: tools act as the token's user, exercises by name, answers are compact
 
   const exercise = (await call(a, "create_exercise", { name: "Kniebeuge", fields: ["weight", "reps"], aliases: ["Squat"] })).data;
   assert.equal((await call(a, "create_exercise", { name: "kniebeuge", fields: ["reps"] })).isError, true);
+  assert.deepEqual([exercise.primary_muscles, exercise.secondary_muscles], [[], []]);
+  const tagged = (await call(a, "update_exercise", { exercise: "squat", primary_muscles: ["quads", "glutes"], secondary_muscles: ["lower_back"] })).data;
+  assert.deepEqual([tagged.primary_muscles, tagged.secondary_muscles], [["glutes", "quads"], ["lower_back"]]);
+  // one list moves a group out of the other
+  const moved = (await call(a, "update_exercise", { exercise: "squat", secondary_muscles: ["glutes", "lower_back"] })).data;
+  assert.deepEqual([moved.primary_muscles, moved.secondary_muscles], [["quads"], ["lower_back", "glutes"]]);
+  assert.equal((await call(a, "create_exercise", { name: "X", fields: ["reps"], primary_muscles: ["brust"] })).isError, true);
 
   const logged = (await call(a, "log_sets", { exercise: "squat", sets: [{ count: 3, reps: 5, weight_kg: 100 }, { reps: 4, weight_kg: 100 }] })).data;
   assert.equal(logged.open, true);
@@ -132,6 +139,8 @@ test("mcp: tools act as the token's user, exercises by name, answers are compact
   assert.equal((await call(b, "get_exercise_progress", { exercise: "Kniebeuge" })).data.sessions.length, 0);
   assert.equal((await call(a, "get_exercise_progress", { exercise: "Kniebeuge" })).data.sessions.length, 1);
   assert.equal((await call(a, "get_training_summary", { weeks: 2 })).data.weeks.length, 2);
+  assert.deepEqual(logged.muscles.muscles.map((x: any) => [x.muscle, x.sets]), [["quads", 4], ["lower_back", 2], ["glutes", 2]]);
+  assert.equal((await call(a, "get_training_summary", { weeks: 1 })).data.weeks[0].muscles.muscles[0].muscle, "quads");
 
   // refused input comes back as a tool error that says what to do
   const unknown = await call(a, "log_sets", { exercise: "Kniebeu", sets: [{ reps: 5 }] });

@@ -31,6 +31,7 @@ import {
 import { createSession, deleteSession, exerciseHistory, findOpenSession, getSession, listSessions, updateSession } from "./data/sessions.ts";
 import { addSets, deleteSet, updateSet, type SetInput } from "./data/sets.ts";
 import { exerciseProgress, trainingSummary } from "./data/stats.ts";
+import { replaceRoles } from "./data/muscles.ts";
 import { createTest, deleteTest, listTests } from "./data/tests.ts";
 import type { TokenScope } from "./data/tokens.ts";
 import { logger } from "./log.ts";
@@ -149,9 +150,12 @@ export function createMcpServer(db: Db, who: { userId: string; scope: TokenScope
       fields: z.array(z.enum(["weight", "reps", "distance", "duration"])).min(1).describe("Values of a set, e.g. [\"weight\", \"reps\"]"),
       note: m.noteText(1000, "Note on the exercise").optional(),
       aliases: z.array(z.string().trim().min(1).max(80)).max(10).optional().describe("Other names for searching and logging"),
+      primary_muscles: m.primaryMuscles,
+      secondary_muscles: m.secondaryMuscles,
     },
     m.exerciseView,
-    (a) => v.exerciseView(createExercise(db, uid, s.exerciseBody.parse(a))),
+    ({ primary_muscles, secondary_muscles, ...a }) =>
+      v.exerciseView(createExercise(db, uid, s.exerciseBody.parse({ ...a, muscles: { primary: primary_muscles ?? [], secondary: secondary_muscles ?? [] } }))),
     write,
   );
   tool(
@@ -164,9 +168,15 @@ export function createMcpServer(db: Db, who: { userId: string; scope: TokenScope
       note: m.noteText(1000, "Note on the exercise").optional(),
       aliases: z.array(z.string().trim().min(1).max(80)).max(10).optional().describe("Replaces all aliases"),
       archived: z.boolean().optional().describe("true hides it from new trainings, false takes it back"),
+      primary_muscles: m.primaryMuscles,
+      secondary_muscles: m.secondaryMuscles,
     },
     m.exerciseView,
-    ({ exercise: ref, ...patch }) => v.exerciseView(updateExercise(db, uid, exercise(ref).id, s.exercisePatch.parse(patch))),
+    ({ exercise: ref, primary_muscles, secondary_muscles, ...patch }) => {
+      const current = exercise(ref);
+      const muscles = replaceRoles(current.muscles, primary_muscles, secondary_muscles);
+      return v.exerciseView(updateExercise(db, uid, current.id, s.exercisePatch.parse({ ...patch, muscles })));
+    },
     write,
   );
   tool("delete_exercise", "Delete an exercise that was never used; otherwise archive it with update_exercise.", { exercise: m.exerciseRef }, m.okView, (a) => {
@@ -189,7 +199,7 @@ export function createMcpServer(db: Db, who: { userId: string; scope: TokenScope
     m.progressView,
     (a) => exerciseProgress(db, uid, exercise(a.exercise).id, { weeks: a.weeks }),
   );
-  tool("get_training_summary", "Per calendar week (oldest first, empty weeks included): trainings, sets, volume and the same per exercise.", { weeks: m.weeks }, m.summaryView, (a) =>
+  tool("get_training_summary", "Per calendar week (oldest first, empty weeks included): trainings, sets, volume, the same per exercise, and weighted sets per muscle group (a set counts 1 for each primary and 0.5 for each secondary muscle of its exercise).", { weeks: m.weeks }, m.summaryView, (a) =>
     trainingSummary(db, uid, { weeks: a.weeks }),
   );
   tool("list_tests", "Test values (1RM or best performance) of an exercise, newest first.", { exercise: m.exerciseRef }, list("tests", m.testView), (a) => ({
@@ -481,7 +491,7 @@ export function createMcpServer(db: Db, who: { userId: string; scope: TokenScope
       return prompt(
         `Analyze my training of the last ${Number.isInteger(n) && n > 0 ? Math.min(n, 52) : WEEKS_DEFAULT} weeks. ` +
           "Call get_training_summary first, then get_exercise_progress for the three or four most trained exercises. " +
-          "Report training frequency, volume trend, progress (estimated 1RM and top sets) and gaps or imbalances, then give two or three concrete suggestions. " +
+          "Report training frequency, volume trend, progress (estimated 1RM and top sets) and gaps or imbalances (also between muscle groups, from the weighted sets per muscle; mention untagged sets if many), then give two or three concrete suggestions. " +
           "Answer in my language and keep it short. Do not change any data.",
       );
     },

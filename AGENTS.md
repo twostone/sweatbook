@@ -25,7 +25,7 @@ sweatbook/               die App (Docker-Build-Kontext)
   Dockerfile             zweistufig, node:24-alpine
   src/                   Backend: Hono + node:sqlite
     db.ts                  Verbindung, Migrationen, Transaktionen
-    data/                  Datenzugriff, ein Modul pro Entität (users, exercises, sessions, blocks, sets, programs, tests, tokens) + plan (Planzeile lesen, Gewicht rechnen) + stats (Auswertungen) + log (Sätze per Übungsname eintragen) + common
+    data/                  Datenzugriff, ein Modul pro Entität (users, exercises, sessions, blocks, sets, programs, tests, tokens) + plan (Planzeile lesen, Gewicht rechnen) + stats (Auswertungen) + log (Sätze per Übungsname eintragen) + muscles (feste Muskelliste, gewichtete Sätze, ohne SQL) + common
     app.ts, server.ts      API, Ingress-Sperre, Identität, Start
     schemas.ts             zod-Schemas der Anfragen (von API und MCP geteilt)
     mcp.ts, mcp-http.ts    MCP-Server (Tools, Ressource, Prompts über data/*) und der Endpunkt /mcp mit Token-Prüfung
@@ -61,6 +61,7 @@ Vor jedem Commit: Tests, `tsc`, `check` und `build` müssen sauber durchlaufen (
 app_user        HA-Nutzer -> eigene id (ha_user_id eindeutig); sex male|female|null: welche festen Gewichte Pläne zeigen (null = Standard)
 exercise        gemeinsamer Katalog aller Nutzer (user_id = angelegt von, nie gefiltert): name, Satzfelder (has_weight, has_reps, has_distance, has_duration), note, archived
 exercise_alias  weitere Namen für die Suche
+exercise_muscle Muskelgruppe einer Übung: muscle (Schlüssel aus MUSCLES, ohne CHECK), role primary|secondary, je Gruppe eine Rolle
 session         ein Training: title, started_at, ended_at (null = läuft), note
 block           geordnet in der Session: type straight (eine Übung) | superset (A1/A2/…), params (später)
 block_exercise  Übung im Block mit Reihenfolge und note (nur für dieses Training, z. B. der Plan); existiert auch ohne Sätze
@@ -86,6 +87,12 @@ set_log         Satz: weight_kg (null = Körpergewicht), reps, duration_s, dista
 - **Namen und Aliase sind global eindeutig**, über Namen und Aliase hinweg, ohne Groß-/Kleinschreibung. Verglichen
   wird in JS (`nameKey` in `data/common.ts`, `toLocaleLowerCase("de")`), weil SQLites `lower()` nur ASCII kennt; die
   Unique-Indizes auf `lower(...)` sind nur ein Rückhalt. Konflikt -> 409 mit `taken_by`.
+- **Muskelgruppen:** feste Liste `MUSCLES` (16 Gruppen, englische Schlüssel) in `data/muscles.ts`, deutsche Labels nur in
+  `web/src/logic/muscles.ts` (ein Test hält beide gleich). Eine Übung hat `muscles: { primary, secondary }`; eine Gruppe in
+  beiden Listen = 400, fehlt das Feld beim Ändern, bleibt es. Auswertung = **gewichtete Sätze**: primär 1, sekundär 0,5
+  (Faustregel), dazu `untagged_sets` (Sätze von Übungen ohne Gruppe). Je Woche in `trainingSummary`, je Session
+  `sessionMuscles` aus dem Baum (nicht im Baum gespeichert: Sätze antworten nur mit sich selbst, deshalb rechnet der
+  Client dieselbe Regel selbst). Aufwärmsätze zählen mit (es gibt kein Aufwärm-Flag).
 - **Übungen werden archiviert, nicht gelöscht**, sobald sie benutzt sind (`ON DELETE RESTRICT`, API 409). Archivierte
   lassen sich nicht in neue Blöcke aufnehmen (409).
 - **Nur eine offene Session pro Nutzer:** Eine neue Session (oder das Wiederöffnen per `ended_at: null`) beendet die
@@ -105,7 +112,7 @@ set_log         Satz: weight_kg (null = Körpergewicht), reps, duration_s, dista
   Plan (`planned_session_id`) hat je Planzeile mit Übung einen Block (`block_exercise.planned_item_id`) und ist danach
   eine normale Session; Löschen von Plan oder Planzeile löst nur die Verweise.
 - **Import** (`data/import.ts`): Übungen der Datei werden über Namen und Aliase im Katalog gefunden, fehlende mit ihren
-  `fields` angelegt; `start_week` setzt frühere Einheiten auf übersprungen mit „vor der App“. Fehler nennen die Stelle
+  `fields` und optional `muscles` angelegt (gefundene bleiben, wie sie sind); `start_week` setzt frühere Einheiten auf übersprungen mit „vor der App“. Fehler nennen die Stelle
   („week 2 A, line 2: …“). Echte Plandateien enthalten Testwerte und kommen nie ins (öffentliche) Repository; dort liegt
   nur das Beispiel mit erfundenen Werten.
 - **Abschnitte:** Ein Abschnitt hat nur Namen und Notiz; seine Reihenfolge folgt der Wochennummer, die Wochen eines Abschnitts müssen nicht
@@ -144,8 +151,8 @@ Gespeichertem). Optionale Textfelder: `""` und `null` löschen, fehlt das Feld, 
 | `GET /api/me` | eigene Nutzer-ID, Anzeigename und `sex` |
 | `PATCH /api/me` | `sex` (`male`/`female`/`null`): welche festen Gewichte Pläne zeigen |
 | `GET /api/exercises?q=` | Katalog inkl. archivierter, Suche über Namen und Aliase, zuletzt genutzte zuerst |
-| `POST /api/exercises` | anlegen (`name`, `fields`, `note`, `aliases`) |
-| `GET`, `PATCH`, `DELETE /api/exercises/:id` | lesen, ändern (`aliases` ersetzt die Liste, `archived`), löschen nur unbenutzt |
+| `POST /api/exercises` | anlegen (`name`, `fields`, `note`, `aliases`, `muscles`) |
+| `GET`, `PATCH`, `DELETE /api/exercises/:id` | lesen, ändern (`aliases` und `muscles` ersetzen, `archived`), löschen nur unbenutzt |
 | `GET /api/exercises/:id/history?before=&limit=` | Sätze nach Sessions, neueste zuerst |
 | `GET /api/sessions?before=&limit=` | Liste mit `block_count`, `set_count` |
 | `POST /api/sessions` | neue Session (`title`, `started_at`, `note`), beendet die offene; mit `ended_at` nachgetragen |
@@ -181,7 +188,9 @@ UI). Ein `read`-Token bekommt nur Lese-Tools. Tokens verwaltet man über `GET/PO
   `summary` („3×5 @ 100 kg“), Plan mit Zeilentext („3×5–8 @ 80 kg (70 % von …)“). Das SDK prüft jede Antwort gegen das Schema.
   Neue Tools brauchen immer ein Ausgabe-Schema und beschriebene Eingaben (ein Test prüft das).
 - **Auswertung und Eintragen:** `get_today`, `get_exercise_progress`, `get_training_summary` (`data/stats.ts`: Volumen, Epley-1RM,
-  Wochen ab Montag in der Zeitzone des Prozesses) und `log_sets` (`data/log.ts`: offene Session oder neue, Block bei Bedarf).
+  gewichtete Sätze je Muskelgruppe, Wochen ab Montag in der Zeitzone des Prozesses; die Session-Sicht trägt dieselbe Auswertung;
+  `create_exercise`/`update_exercise` nehmen `primary_muscles`/`secondary_muscles`, eine Liste ersetzt ihre Rolle und nimmt
+  ihre Gruppen aus der anderen) und `log_sets` (`data/log.ts`: offene Session oder neue, Block bei Bedarf).
 - **Ressourcen und Prompts:** Pläne als `sweatbook://programs/{programId}` (nur beigetretene, auch mit `read`-Token); Prompts
   `analyze_training`, `suggest_next_workout`, `adjust_plan` liefern nur Anweisungen, keine Daten.
 - Neue API-Route = neues Tool in `mcp.ts` (Schreib-Tools mit `write`-Flag, Löschen zusätzlich `destructive`).
@@ -265,6 +274,8 @@ Actions to create and approve pull requests“.
 
 - Phase 1 ist gebaut: Backend und Oberfläche (Start mit Nachtragen, Verlauf, Session-Übersicht, Übung, Supersatz, Sheet
   „Übung hinzufügen“, Übungskatalog mit Anlegen und Detail).
+- Muskelgruppen sind gebaut: Pflege im Übungsformular (Chips, Antippen wechselt primär → sekundär → aus), Abschnitt
+  „Muskelgruppen“ in der Session-Übersicht, Wochen nur über MCP. Bestehende Übungen haben anfangs keine Gruppen.
 - Phase 2 ist gebaut: Satzfelder pro Übung, Programme mit Wochen, Einheiten und Planzeilen, Testwerte, Import aus JSON,
   Training aus dem Plan (Start-Karten, geplante Einheit, Soll und Vorbelegung, Testwert aus dem Testsatz) und der Editor.
   Die Übungsseite hat bewusst eine nachgefüllte „nächster Satz“-Zeile statt mehrerer vorbelegter. Konzept und Entscheidungen

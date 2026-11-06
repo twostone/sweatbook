@@ -7,6 +7,7 @@ const ex = (id: string, name: string, aliases: string[] = [], archived = false):
   id,
   name,
   fields: ["weight", "reps"],
+  muscles: { primary: [], secondary: [] },
   note: null,
   archived,
   aliases,

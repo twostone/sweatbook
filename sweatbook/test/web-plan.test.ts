@@ -51,7 +51,7 @@ test("cardLine: the plan before the first set, then done against planned", () =>
   const be = (over: Partial<SessionExercise>): SessionExercise => ({
     id: "be",
     position: 0,
-    exercise: { id: "e", name: "Bankziehen", fields: ["weight", "reps"], archived: false },
+    exercise: { id: "e", name: "Bankziehen", fields: ["weight", "reps"], archived: false, muscles: { primary: [], secondary: [] } },
     note: null,
     sets: [],
     last_time: null,

@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { setup, squat } from "./helpers.ts";
+import { pullup, sessionWith, setup, squat } from "./helpers.ts";
+import { sessionMuscles } from "../src/data/muscles.ts";
 
 test("session: create with a local time, stored as UTC; defaults to now", async () => {
   const { call } = setup();
@@ -81,4 +82,24 @@ test("session: entered afterwards with ended_at, it is done at once and leaves t
   assert.equal((await call("GET", `/api/sessions/${running.id}`)).json.ended_at, null);
   const bad = await call("POST", "/api/sessions", { started_at: "2026-10-20T18:30:00Z", ended_at: "2026-10-20T18:00:00Z" });
   assert.equal(bad.status, 400);
+});
+
+test("session: the tree carries the muscle groups of its exercises, sessionMuscles weighs its sets", async () => {
+  const { call } = setup();
+  const sq = (await call("POST", "/api/exercises", { ...squat, muscles: { primary: ["quads"], secondary: ["glutes"] } })).json;
+  const pu = (await call("POST", "/api/exercises", pullup)).json;
+  let tree = await sessionWith(call, [sq.id, pu.id]);
+  assert.deepEqual(sessionMuscles(tree.blocks), { muscles: [], untagged_sets: 0 });
+  assert.deepEqual(tree.blocks[0].exercises[0].exercise.muscles, { primary: ["quads"], secondary: ["glutes"] });
+  const [a, b] = [tree.blocks[0].exercises[0].id, tree.blocks[1].exercises[0].id];
+  await call("POST", `/api/block-exercises/${a}/sets`, { sets: [{ weight_kg: 100, reps: 5 }, { weight_kg: 100, reps: 5 }, { weight_kg: 100, reps: 5 }] });
+  await call("POST", `/api/block-exercises/${b}/sets`, { sets: [{ reps: 8 }] });
+  tree = (await call("GET", `/api/sessions/${tree.id}`)).json;
+  assert.deepEqual(sessionMuscles(tree.blocks), {
+    muscles: [
+      { muscle: "quads", sets: 3, primary_sets: 3, secondary_sets: 0 },
+      { muscle: "glutes", sets: 1.5, primary_sets: 0, secondary_sets: 3 },
+    ],
+    untagged_sets: 1,
+  });
 });

@@ -94,3 +94,29 @@ test("exercise: the catalog is shared, names are unique across users, last use i
   assert.notEqual((await anna("GET", `/api/exercises/${e.id}`)).json.last_used_at, null);
   assert.equal((await ben("GET", `/api/exercises/${e.id}`)).json.last_used_at, null);
 });
+
+test("exercise: muscle groups primary and secondary, kept unless sent, replaced when sent", async () => {
+  const { call } = setup();
+  const created = await call("POST", "/api/exercises", { ...squat, muscles: { primary: ["quads", "glutes", "quads"], secondary: ["lower_back"] } });
+  assert.equal(created.status, 201);
+  // duplicates dropped, list order (top to bottom)
+  assert.deepEqual(created.json.muscles, { primary: ["glutes", "quads"], secondary: ["lower_back"] });
+  const id = created.json.id;
+  assert.deepEqual((await call("PATCH", `/api/exercises/${id}`, { note: "tief" })).json.muscles, created.json.muscles, "left out = unchanged");
+  const changed = await call("PATCH", `/api/exercises/${id}`, { muscles: { primary: ["quads"], secondary: ["glutes", "adductors"] } });
+  assert.deepEqual(changed.json.muscles, { primary: ["quads"], secondary: ["glutes", "adductors"] });
+  assert.deepEqual((await call("GET", "/api/exercises")).json[0].muscles, changed.json.muscles);
+  assert.deepEqual((await call("POST", "/api/exercises", pullup)).json.muscles, { primary: [], secondary: [] }, "none by default");
+});
+
+test("exercise: muscle groups validation, gone with the exercise", async () => {
+  const { db, call } = setup();
+  const both = await call("POST", "/api/exercises", { ...squat, muscles: { primary: ["quads"], secondary: ["quads"] } });
+  assert.equal(both.status, 400);
+  assert.equal((await call("POST", "/api/exercises", { ...squat, muscles: { primary: ["brust"], secondary: [] } })).status, 400);
+  assert.equal((await call("POST", "/api/exercises", { ...squat, muscles: { primary: ["quads"] } })).status, 400, "both lists needed");
+  const id = (await call("POST", "/api/exercises", { ...squat, muscles: { primary: ["quads"], secondary: [] } })).json.id;
+  assert.equal((await call("PATCH", `/api/exercises/${id}`, { muscles: { primary: ["quads"], secondary: ["quads"] } })).status, 400);
+  assert.equal((await call("DELETE", `/api/exercises/${id}`)).status, 204);
+  assert.equal(db.prepare("SELECT count(*) AS n FROM exercise_muscle").get()?.n, 0);
+});

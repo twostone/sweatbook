@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.12.0](https://github.com/twostone/sweatbook/compare/v1.11.0...v1.12.0) (2026-11-06)
+
+
+### Neu
+
+* Anmeldung am MCP-Endpunkt per OAuth über Home Assistant ([#49](https://github.com/twostone/sweatbook/issues/49)) ([e9dfaeb](https://github.com/twostone/sweatbook/commit/e9dfaebf6b60d2f25ff53940255c154730012c11))
+
 ## [1.11.0](https://github.com/twostone/sweatbook/compare/v1.10.1...v1.11.0) (2026-11-06)
 
 

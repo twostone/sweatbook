@@ -30,7 +30,8 @@ sweatbook/               die App (Docker-Build-Kontext)
     schemas.ts             zod-Schemas der Anfragen (von API und MCP geteilt)
     mcp.ts, mcp-http.ts    MCP-Server (Tools, Ressource, Prompts über data/*) und der Endpunkt /mcp mit Token-Prüfung
     mcp-schemas.ts        eigene Ein- und Ausgabe-Schemas der Tools (beschrieben, Übungen per Name); mcp-views.ts: kompakte Sichten und Texte
-    log.ts, options.ts     Logger (logfmt) und App-Optionen (wie meal-planner)
+    log.ts, options.ts     Logger (logfmt) und App-Optionen (wie meal-planner, dazu die öffentlichen URLs)
+    auth/                  OAuth über HA (wie garmin-insights): ha-token.ts (Token per WebSocket auth/current_user prüfen), ha-url.ts (externe URL von HA über den Supervisor), resource-metadata.ts (RFC 9728)
   vite.config.ts         Vite und SvelteKit-Konfiguration (SvelteKit 3: keine svelte.config.js), adapter-static -> dist/
   web/                   Frontend: SvelteKit (Svelte 5, Runes) als reine SPA mit Hash-Router, Zustand in store.svelte.ts
     src/TopBar.svelte      Kopfzeile aller Seiten unter dem Start (Zurück, Label, Aktionen) mit ProfileLink; Start und Session haben eigene Köpfe, beide mit ProfileLink
@@ -149,6 +150,7 @@ Gespeichertem). Optionale Textfelder: `""` und `null` löschen, fehlt das Feld, 
 | Methode und Pfad | Zweck |
 | --- | --- |
 | `GET /api/me` | eigene Nutzer-ID, Anzeigename und `sex` |
+| `GET /api/mcp` | `enabled`, öffentliche `url` von `/mcp` (oder `null`), `oauth` |
 | `PATCH /api/me` | `sex` (`male`/`female`/`null`): welche festen Gewichte Pläne zeigen |
 | `GET /api/exercises?q=` | Katalog inkl. archivierter, Suche über Namen und Aliase, zuletzt genutzte zuerst |
 | `POST /api/exercises` | anlegen (`name`, `fields`, `note`, `aliases`, `muscles`) |
@@ -179,7 +181,14 @@ Gespeichertem). Optionale Textfelder: `""` und `null` löschen, fehlt das Feld, 
 
 **MCP** (`POST /mcp`, nur mit `mcp_enabled`, sonst 404): Streamable HTTP, zustandslos (`src/mcp.ts`, Tools rufen `data/*` direkt auf).
 `Authorization: Bearer sb_…` wird gegen `api_token` geprüft; das Token handelt als sein Besitzer (dieselben Regeln wie in der
-UI). Ein `read`-Token bekommt nur Lese-Tools. Tokens verwaltet man über `GET/POST /api/tokens`, `DELETE /api/tokens/:id`
+UI). Ein `read`-Token bekommt nur Lese-Tools.
+- **OAuth über Home Assistant** (wie garmin-insights): HA ist Authorization Server, die App nur Resource Server, sie stellt keine
+  Tokens aus. Aktiv nur mit `mcp_enabled` und `app_external_url`; die HA-URL kommt aus `ha_external_url` oder beim Start aus
+  `GET http://supervisor/core/api/config` (`external_url`), sonst bleibt OAuth aus. Dann liefert die App
+  `/.well-known/oauth-protected-resource[/mcp]`, und ein 401 an `/mcp` trägt `resource_metadata`. Token ohne `sb_` = HA-Token,
+  geprüft per WebSocket `auth/current_user` (Cache ≤ 60 s), über `resolveUser` auf `app_user` abgebildet, Scope immer `write`.
+  **Jedes gültige HA-Token eines echten Nutzers gilt** (keine Audience in HA, im README offen benannt), System-User nicht.
+  HA nicht erreichbar = 503, nie anonym. `GET /api/mcp` (`enabled`, `url`, `oauth`) erklärt das dem Profil. Tokens verwaltet man über `GET/POST /api/tokens`, `DELETE /api/tokens/:id`
 (nur Ingress), Klartext nur in der Antwort auf `POST`. Oberfläche: Profil (`#/profile`, Icon rechts in jedem Header) mit Name und Abschnitt "Access Token"; die Anleitung dort ist agentenneutral (Adresse, Header, JSON-Beispiel, Claude Code nur als eines).
 - **Eigene Schemas für Modelle** (`mcp-schemas.ts`): jedes Eingabefeld mit Beschreibung und Einheit, **Übungen per Name, Alias oder
   ID** (`resolveExercise` in `data/exercises.ts`: nie raten, nie anlegen, Fehler nennt ähnliche Namen), Sätze mit `count`. Eingaben
@@ -203,9 +212,10 @@ UI). Ein `read`-Token bekommt nur Lese-Tools. Tokens verwaltet man über `GET/PO
 - Der Server nimmt in der App nur Verbindungen von `172.30.32.2` (Supervisor-Ingress) an (`INGRESS_ONLY_IP`, im
   Dockerfile gesetzt). Ohne Verbindungsinfo wird abgelehnt (fail closed). Ohne die Sperre wären die
   `X-Remote-User-*`-Header fälschbar. Nicht lockern und nicht entfernen.
-- **`/mcp` ist bewusst vom Ingress-Guard ausgenommen** (ein Pfadvergleich in `app.ts`), weil externe Clients nicht durch Ingress
-  kommen. Dort zählt nur das Token: `X-Remote-User-*` wird ignoriert, falsche Token werden gedrosselt (429), die Route ist
+- **`/mcp` ist bewusst vom Ingress-Guard ausgenommen** (`publicPaths` in `app.ts`), weil externe Clients nicht durch Ingress
+  kommen. Mit OAuth kommen genau die beiden öffentlichen Metadaten-Pfade (`RESOURCE_METADATA_PATHS`) dazu. Dort zählt nur das Token: `X-Remote-User-*` wird ignoriert, falsche Token werden gedrosselt (429), die Route ist
   standardmäßig aus (`mcp_enabled`). `/api/*` bleibt unverändert Ingress-only. Die Ausnahme nicht auf andere Pfade ausweiten.
+- `homeassistant_api: true` dient nur dazu, die externe URL von HA zu lesen. Keine weiteren Core-Aufrufe ohne Rückfrage.
 - **Identität an genau einer Stelle** (Middleware in `app.ts`): Sie macht aus dem HA-Nutzer eine `app_user`-ID. Ein
   späterer Login ohne HA (z. B. Cloudflare Access) kommt nur dort hinzu.
 - **Das Repository ist öffentlich:** keine Zugangsdaten, Tokens, privaten Hostnamen oder Adressen aus dem Heimnetz
@@ -287,7 +297,8 @@ Actions to create and approve pull requests“.
   außerhalb des Repos.
 - Am echten Home Assistant geprüft (24.10.2026): Ingress-Header `X-Remote-User-*`, Start der App, `prefers-color-scheme`
   kommt in der Companion-App an (kein eigener Theme-Umschalter nötig). Noch offen am echten Gerät: Android-Zahlentastatur bei kg und Zeit, Dateiauswahl für den Plan-Import in der
-  Companion-App, vier Satzfelder in einer Zeile.
+  Companion-App, vier Satzfelder in einer Zeile. Ebenfalls offen: OAuth am echten HA (Claude-Connector und Claude Code gegen
+  HA, `external_url` über den Supervisor-Proxy).
 
 ## Git und Pull Requests
 

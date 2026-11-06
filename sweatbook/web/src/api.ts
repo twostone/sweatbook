@@ -8,6 +8,7 @@ import type {
   ImportResult,
   ApiToken,
   CreatedToken,
+  McpInfo,
   Me,
   Sex,
   TokenScope,
@@ -85,6 +86,7 @@ export const getMe = () => request<Me>("GET", "api/me");
 export const setSex = (sex: Sex | null) => request<Me>("PATCH", "api/me", { sex });
 
 // Access tokens for the MCP endpoint. The plain token is only in the answer of creation.
+export const getMcpInfo = () => request<McpInfo>("GET", "api/mcp");
 export const listTokens = () => request<ApiToken[]>("GET", "api/tokens");
 export const createToken = (name: string, scope: TokenScope) => request<CreatedToken>("POST", "api/tokens", { name, scope });
 export const revokeToken = (id: string) => request<void>("DELETE", `api/tokens/${enc(id)}`);

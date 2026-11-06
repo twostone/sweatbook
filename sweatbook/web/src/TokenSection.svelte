@@ -1,9 +1,9 @@
 <script lang="ts">
   import CopyBox from "./CopyBox.svelte";
   import * as api from "./api";
-  import { authorizationHeader, mcpCommand, mcpJsonConfig, MCP_URL_PLACEHOLDER, scopeLabel, TOKEN_PLACEHOLDER } from "./logic/access";
+  import { authorizationHeader, mcpCommand, mcpJsonConfig, mcpOAuthCommand, MCP_URL_PLACEHOLDER, scopeLabel, TOKEN_PLACEHOLDER } from "./logic/access";
   import { guard } from "./store.svelte";
-  import type { ApiToken, TokenScope } from "./types";
+  import type { ApiToken, McpInfo, TokenScope } from "./types";
 
   // Access tokens: each lets an MCP-capable agent act as you. The plain token is shown once, right after creating it.
   let tokens = $state<ApiToken[]>([]);
@@ -12,10 +12,15 @@
   let fresh = $state<{ token: string; name: string } | null>(null);
   let busy = $state(false);
 
+  let info = $state<McpInfo | null>(null);
+
   const token = $derived(fresh?.token ?? TOKEN_PLACEHOLDER);
+  const url = $derived(info?.url ?? MCP_URL_PLACEHOLDER);
 
   async function load() {
-    await guard(async () => void (tokens = await api.listTokens()));
+    await guard(async () => {
+      [tokens, info] = await Promise.all([api.listTokens(), api.getMcpInfo()]);
+    });
   }
   void load();
 
@@ -46,6 +51,20 @@
   <h2 class="label">Access Token</h2>
   <p class="muted">Mit einem Access Token verbindet sich ein MCP-fähiger Agent mit deinem Training und handelt in deinem Namen. Der MCP-Server muss in den App-Optionen eingeschaltet sein.</p>
 
+  {#if info?.oauth}
+    <details class="card">
+      <summary>Anmeldung über Home Assistant</summary>
+      <div class="steps">
+        <p class="muted">
+          Clients mit OAuth (zum Beispiel ein Connector in Claude oder Claude Code) brauchen kein Token: Du gibst nur die Adresse ein und meldest dich bei Home Assistant an.
+          Der Client darf danach alles, was du in der App darfst.
+        </p>
+        <CopyBox label="Server-Adresse" value={url} />
+        <CopyBox label="Beispiel: Claude Code" value={mcpOAuthCommand(url)} />
+      </div>
+    </details>
+  {/if}
+
   {#if fresh}
     <div class="card" role="status">
       <CopyBox label="Token „{fresh.name}“ – wird nur jetzt angezeigt" value={fresh.token} />
@@ -68,13 +87,14 @@
     <summary>Einrichtung</summary>
     <div class="steps">
     <p class="muted">
-      Der Server spricht MCP über Streamable HTTP. Von außen ist er nur erreichbar, wenn du die Adresse freigegeben hast (zum Beispiel über einen Tunnel); ersetze den
-      Platzhalter durch diese Adresse.{fresh ? "" : " Die Beispiele enthalten einen Platzhalter für das Token."}
+      Der Server spricht MCP über Streamable HTTP. Von außen ist er nur erreichbar, wenn du die Adresse freigegeben hast (zum Beispiel über einen Tunnel){info?.url
+        ? "."
+        : "; ersetze den Platzhalter durch diese Adresse."}{fresh ? "" : " Die Beispiele enthalten einen Platzhalter für das Token."}
     </p>
-    <CopyBox label="Server-Adresse" value={MCP_URL_PLACEHOLDER} />
+    <CopyBox label="Server-Adresse" value={url} />
     <CopyBox label="Header" value={authorizationHeader(token)} />
-    <CopyBox label="Beispiel: JSON-Konfiguration (Cursor, VS Code, …)" value={mcpJsonConfig(token)} />
-    <CopyBox label="Beispiel: Claude Code" value={mcpCommand(token)} />
+    <CopyBox label="Beispiel: JSON-Konfiguration (Cursor, VS Code, …)" value={mcpJsonConfig(token, url)} />
+    <CopyBox label="Beispiel: Claude Code" value={mcpCommand(token, url)} />
     </div>
   </details>
 

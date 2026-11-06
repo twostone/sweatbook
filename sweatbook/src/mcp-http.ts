@@ -2,7 +2,10 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import type { Context } from "hono";
 import { getConnInfo } from "@hono/node-server/conninfo";
 import type { Db } from "./db.ts";
-import { resolveToken } from "./data/tokens.ts";
+import { resolveToken, TOKEN_PREFIX, type TokenOwner } from "./data/tokens.ts";
+import { resolveUser } from "./data/users.ts";
+import { HaUnavailableError, type HaTokenVerifier } from "./auth/ha-token.ts";
+import { metadataUrl } from "./auth/resource-metadata.ts";
 import { logger } from "./log.ts";
 import { createMcpServer } from "./mcp.ts";
 
@@ -36,21 +39,48 @@ function clientKey(c: Context): string {
   }
 }
 
-// POST /mcp: Streamable HTTP, stateless (a server and transport per request). The only way in is a token of the app;
-// X-Remote-User-* headers are ignored here, because this route is reachable without the ingress guard.
-export async function handleMcp(c: Context, db: Db, limiter: FailureLimiter, version?: string): Promise<Response> {
+// OAuth through Home Assistant: HA issues the tokens, this app checks them. Absent = only the app's own tokens.
+export type McpOAuth = { verifier: HaTokenVerifier; appUrl: string };
+export type McpOptions = { limiter: FailureLimiter; version?: string; oauth?: McpOAuth };
+
+// Who a bearer token belongs to. The app's own tokens carry their prefix; anything else can only be a Home Assistant
+// token, which may do what its user may do in the UI (HA has no scopes). The HA user gets an app_user like on ingress.
+// Throws HaUnavailableError when Home Assistant cannot be asked.
+async function tokenOwner(db: Db, token: string, oauth: McpOAuth | undefined): Promise<TokenOwner | null> {
+  if (token.startsWith(TOKEN_PREFIX)) return resolveToken(db, token);
+  if (!oauth) return null;
+  const verified = await oauth.verifier(token);
+  if (!verified) return null;
+  return { user_id: resolveUser(db, verified.haUserId, verified.name).id, scope: "write" };
+}
+
+// POST /mcp: Streamable HTTP, stateless (a server and transport per request). The only way in is a bearer token (the
+// app's own or, with OAuth, one from Home Assistant); X-Remote-User-* headers are ignored here, because this route is
+// reachable without the ingress guard.
+export async function handleMcp(c: Context, db: Db, opts: McpOptions): Promise<Response> {
   const key = clientKey(c);
   const now = Date.now();
-  if (limiter.blocked(key, now)) return c.json({ error: "too many attempts" }, 429);
+  if (opts.limiter.blocked(key, now)) return c.json({ error: "too many attempts" }, 429);
 
   const match = /^Bearer (\S+)$/.exec(c.req.header("Authorization") ?? "");
-  const owner = match ? resolveToken(db, match[1]!) : null;
+  let owner: TokenOwner | null = null;
+  if (match) {
+    try {
+      owner = await tokenOwner(db, match[1]!, opts.oauth);
+    } catch (err) {
+      // Fail closed, but do not count it as a wrong token: the client is not at fault.
+      if (err instanceof HaUnavailableError) return c.json({ error: "authorization server unavailable" }, 503);
+      throw err;
+    }
+  }
   if (!owner) {
-    limiter.note(key, now);
-    return c.json({ error: "invalid token" }, 401, { "WWW-Authenticate": "Bearer" });
+    opts.limiter.note(key, now);
+    // With OAuth the challenge points MCP clients to the metadata, from where they find Home Assistant (RFC 9728).
+    const challenge = opts.oauth ? `Bearer resource_metadata="${metadataUrl(opts.oauth.appUrl)}"` : "Bearer";
+    return c.json({ error: "invalid token" }, 401, { "WWW-Authenticate": challenge });
   }
 
-  const server = createMcpServer(db, { userId: owner.user_id, scope: owner.scope }, version);
+  const server = createMcpServer(db, { userId: owner.user_id, scope: owner.scope }, opts.version);
   const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
   await server.connect(transport);
   try {

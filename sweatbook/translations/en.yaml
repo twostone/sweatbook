@@ -5,5 +5,11 @@ configuration:
   mcp_enabled:
     name: MCP server
     description: Turns on the MCP endpoint /mcp, through which an MCP-capable agent reaches your training with an access token. Create tokens in the app under Profile (icon at the top right). Then set a host port for 8099 under Network.
+  app_external_url:
+    name: External URL of the app
+    description: Public HTTPS address at which your reverse proxy serves port 8099 (e.g. https://sweatbook.example.com). With it, MCP clients sign in through Home Assistant (OAuth).
+  ha_external_url:
+    name: External URL of Home Assistant
+    description: Only needed if none is set under Settings → System → Network. Leave empty to use that value.
 network:
-  8099/tcp: MCP endpoint (/mcp), access token required
+  8099/tcp: MCP endpoint (/mcp), access token or Home Assistant sign-in required

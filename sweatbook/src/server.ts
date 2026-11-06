@@ -5,7 +5,9 @@ import { dirname } from "node:path";
 import { createApp } from "./app.ts";
 import { openDb, schemaVersion } from "./db.ts";
 import { logger, resolveLogLevel, setLogLevel } from "./log.ts";
-import { readAddonOptions } from "./options.ts";
+import { parseUrlSettings, readAddonOptions } from "./options.ts";
+import { createHaTokenVerifier } from "./auth/ha-token.ts";
+import { fetchHaExternalUrl } from "./auth/ha-url.ts";
 import { installShutdownHandlers } from "./shutdown.ts";
 
 // The app's options (Supervisor writes /data/options.json); `log_level` beats LOG_LEVEL, else info.
@@ -26,9 +28,20 @@ const version = (() => {
 const dbPath = process.env.DB_PATH ?? "./data/sweatbook.db";
 if (dbPath !== ":memory:") mkdirSync(dirname(dbPath), { recursive: true });
 const db = openDb(dbPath);
-log.info("starting", { version, mcp: options.mcp_enabled === true, log_level: logLevel, schema: schemaVersion(db), tz: process.env.TZ, node: process.version });
+const mcpEnabled = options.mcp_enabled === true;
 
-const app = createApp(db, { allowedIp: process.env.INGRESS_ONLY_IP, mcpEnabled: options.mcp_enabled === true, version });
+// OAuth for /mcp needs both public URLs: the app's own (only the user knows the reverse proxy) and Home Assistant's
+// (from the option, else from HA's own settings). Missing either -> /mcp keeps working with the app's tokens only.
+const urls = parseUrlSettings(options, process.env);
+for (const name of urls.invalid) log.warn("invalid_url_option", { option: name });
+const appUrl = urls.appExternalUrl;
+const haUrl = mcpEnabled && appUrl ? (urls.haExternalUrl ?? (await fetchHaExternalUrl({ token: process.env.SUPERVISOR_TOKEN }))) : null;
+if (mcpEnabled && appUrl && !haUrl) log.warn("oauth_off", { reason: "no external url of home assistant" });
+const oauth = appUrl && haUrl ? { appUrl, haUrl, verifier: createHaTokenVerifier() } : undefined;
+
+log.info("starting", { version, mcp: mcpEnabled, oauth: !!oauth, log_level: logLevel, schema: schemaVersion(db), tz: process.env.TZ, node: process.version });
+
+const app = createApp(db, { allowedIp: process.env.INGRESS_ONLY_IP, mcpEnabled, appUrl: appUrl ?? undefined, oauth, version });
 // API routes are registered first; anything else is the built frontend (npm run build).
 app.use("/*", serveStatic({ root: "./dist" }));
 const port = Number(process.env.PORT ?? 8099);

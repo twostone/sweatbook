@@ -28,6 +28,8 @@ export type Muscles = { primary: Muscle[]; secondary: Muscle[] };
 export type TokenScope = "read" | "write";
 export type ApiToken = { id: string; name: string; scope: TokenScope; created_at: string; last_used_at: string | null };
 export type CreatedToken = { token: string; info: ApiToken };
+// GET api/mcp: whether /mcp is on, its public address (null = unknown to the app) and whether OAuth through HA is on.
+export type McpInfo = { enabled: boolean; url: string | null; oauth: boolean };
 
 export type Sex = "male" | "female";
 export type Me = { id: string; display_name: string | null; sex: Sex | null };

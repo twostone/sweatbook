@@ -32,6 +32,22 @@ done
 [ "$code" = "403" ] || { echo "expected 403 from the ingress guard, got $code"; dump guarded; exit 1; }
 docker rm -f guarded
 
+# 3) MCP with OAuth through Home Assistant (URLs from the environment): the metadata is public past the ingress guard,
+# /mcp without a token answers 401 with a challenge that points to it. The options file switches MCP on.
+printf '{"mcp_enabled":true}' > /tmp/smoke-options.json
+docker run -d --name oauth -p 8101:8099 -v /tmp/smoke-options.json:/opts.json:ro -e OPTIONS_PATH=/opts.json \
+  -e APP_EXTERNAL_URL=https://sweatbook.example.test -e HA_EXTERNAL_URL=https://ha.example.test "$IMAGE"
+meta=http://localhost:8101/.well-known/oauth-protected-resource/mcp
+for _ in $(seq 1 30); do
+  curl -fsS "$meta" >/dev/null 2>&1 && break
+  sleep 1
+done
+curl -fsS "$meta" | grep -q '"authorization_servers":\["https://ha.example.test"\]' || { dump oauth; exit 1; }
+challenge=$(curl -s -o /dev/null -D - -X POST http://localhost:8101/mcp | tr -d '\r' | grep -i '^www-authenticate:' || true)
+echo "$challenge" | grep -q 'resource_metadata="https://sweatbook.example.test/.well-known/oauth-protected-resource/mcp"' \
+  || { echo "unexpected challenge: $challenge"; dump oauth; exit 1; }
+docker rm -f oauth
+
 # Shutdown: SIGTERM (what `ha apps stop` sends) must end the app cleanly with exit code 0 within the Supervisor's
 # 10 s timeout. Otherwise the Supervisor shows the app as "error" instead of "stopped".
 docker run -d --name stopping -p 8099:8099 -e INGRESS_ONLY_IP= "$IMAGE"

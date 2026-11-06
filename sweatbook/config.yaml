@@ -5,6 +5,8 @@ version: "1.11.0" # x-release-please-version
 slug: sweatbook
 description: Training tracken und planen
 url: "https://github.com/twostone/sweatbook"
+# Home Assistant 2026.10.1 brings PKCE (S256), client-ID metadata documents and loopback redirects for OAuth (MCP login).
+homeassistant: "2026.10.1"
 arch:
   - aarch64
   - amd64
@@ -17,12 +19,19 @@ panel_title: Sweatbook
 panel_admin: false
 # Options land in /data/options.json (written by the Supervisor); a change needs a restart.
 # Port 8099 is the app itself; it is only opened on the host when the user sets a host port (null = closed).
-# /api stays reachable through ingress only; /mcp (when mcp_enabled) is reachable with an access token.
+# /api stays reachable through ingress only; /mcp (when mcp_enabled) is reachable with an access token or, with
+# app_external_url set, a Home Assistant OAuth token. Put a TLS reverse proxy in front; the app speaks plain HTTP.
 ports:
   8099/tcp: null
+# Only to read Home Assistant's external URL (GET /core/api/config) when ha_external_url is empty.
+homeassistant_api: true
 options:
   log_level: info
   mcp_enabled: false
+  app_external_url: ""
+  ha_external_url: ""
 schema:
   log_level: list(debug|info|warning|error)
   mcp_enabled: bool
+  app_external_url: url?
+  ha_external_url: url?

@@ -1,5 +1,5 @@
 // Access tokens for the MCP endpoint: what a person needs to connect any MCP-capable agent to the server.
-// The address is not known to the app (it is reached from outside, not through ingress), so the user fills it in.
+// The address is only known when the option app_external_url is set; otherwise the user fills it in.
 export const MCP_URL_PLACEHOLDER = "https://<adresse-der-app>/mcp";
 export const TOKEN_PLACEHOLDER = "<access-token>";
 
@@ -16,3 +16,8 @@ export function mcpCommand(token = TOKEN_PLACEHOLDER, url = MCP_URL_PLACEHOLDER)
 }
 
 export const scopeLabel = (scope: "read" | "write"): string => (scope === "write" ? "Lesen und Schreiben" : "Nur lesen");
+
+// With OAuth through Home Assistant the client needs only the address; it finds HA and signs in by itself.
+export function mcpOAuthCommand(url = MCP_URL_PLACEHOLDER): string {
+  return `claude mcp add --transport http sweatbook ${url}`;
+}

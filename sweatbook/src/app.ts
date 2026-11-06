@@ -34,7 +34,8 @@ import { createSession, deleteSession, exerciseHistory, getSession, listSessions
 import { addSets, deleteSet, updateSet } from "./data/sets.ts";
 import { resolveUser, setUserSex, type User } from "./data/users.ts";
 import { createToken, listTokens, revokeToken } from "./data/tokens.ts";
-import { createFailureLimiter, handleMcp } from "./mcp-http.ts";
+import { createFailureLimiter, handleMcp, type McpOAuth } from "./mcp-http.ts";
+import { RESOURCE_METADATA_PATHS, resourceMetadata } from "./auth/resource-metadata.ts";
 import { logger } from "./log.ts";
 import {
   isoTime,
@@ -75,6 +76,10 @@ export type AppOptions = {
   allowedIp?: string;
   // /mcp is only served when switched on (the app option mcp_enabled); off -> 404.
   mcpEnabled?: boolean;
+  // Public URL of the app behind the reverse proxy (option app_external_url), shown in the profile.
+  appUrl?: string;
+  // OAuth through Home Assistant for /mcp; only used together with mcpEnabled. Needs the public HA URL as well.
+  oauth?: McpOAuth & { haUrl: string };
   version?: string;
 };
 
@@ -88,6 +93,10 @@ const SLOW_REQUEST_MS = 2000;
 export function createApp(db: Db, opts: AppOptions = {}) {
   const app = new Hono<Env>();
   const mcpLimiter = createFailureLimiter();
+  const oauth = opts.mcpEnabled ? opts.oauth : undefined;
+  // The only routes outside the ingress guard: external MCP clients cannot come through ingress. /mcp authenticates by
+  // token itself, the OAuth metadata is public by design.
+  const publicPaths = new Set([MCP_PATH, ...(oauth ? RESOURCE_METADATA_PATHS : [])]);
 
   // First in line, so refused requests show up as well. Path only, never the query string.
   app.use("*", async (c, next) => {
@@ -102,8 +111,7 @@ export function createApp(db: Db, opts: AppOptions = {}) {
 
   if (opts.allowedIp) {
     app.use("*", async (c, next) => {
-      // The one route outside the guard: external MCP clients cannot come through ingress. It authenticates by token itself.
-      if (c.req.path === MCP_PATH) return next();
+      if (publicPaths.has(c.req.path)) return next();
       let addr: string | undefined;
       try {
         addr = getConnInfo(c).remote.address?.replace(/^::ffff:/, "");
@@ -135,6 +143,10 @@ export function createApp(db: Db, opts: AppOptions = {}) {
   });
 
   app.get("/api/me", (c) => c.json(c.get("user")));
+  // What the profile needs to explain the connection: is /mcp on, its public address (if known), and is OAuth on.
+  app.get("/api/mcp", (c) =>
+    c.json({ enabled: opts.mcpEnabled === true, url: opts.appUrl ? `${opts.appUrl}${MCP_PATH}` : null, oauth: !!oauth }),
+  );
   app.patch("/api/me", zValidator("json", mePatch), (c) => c.json(setUserSex(db, c.get("user"), c.req.valid("json").sex)));
 
   // MCP access tokens: managed in the app (ingress), used on /mcp. The plain token is shown once, at creation.
@@ -276,7 +288,10 @@ export function createApp(db: Db, opts: AppOptions = {}) {
   app.delete("/api/planned-items/:id", zValidator("param", idParam), (c) => c.json(deletePlanItem(db, c.get("user").id, c.req.valid("param").id)));
 
   app.all("/api/*", (c) => c.json({ error: "not found" }, 404));
-  app.all(MCP_PATH, (c) => (opts.mcpEnabled ? handleMcp(c, db, mcpLimiter, opts.version) : c.json({ error: "not found" }, 404)));
+  if (oauth) app.route("/", resourceMetadata(oauth.appUrl, oauth.haUrl));
+  app.all(MCP_PATH, (c) =>
+    opts.mcpEnabled ? handleMcp(c, db, { limiter: mcpLimiter, version: opts.version, oauth }) : c.json({ error: "not found" }, 404),
+  );
 
   return app;
 }

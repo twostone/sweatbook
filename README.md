@@ -52,10 +52,36 @@ außerdem als MCP-Ressourcen (`sweatbook://programs/…`) abrufbar.
 
 Wer den Token hat, hat deinen Zugriff; behandle ihn wie ein Passwort.
 
+## MCP-Zugriff mit Anmeldung über Home Assistant (OAuth)
+
+Clients, die OAuth beherrschen (etwa ein Connector in Claude oder Claude Code), brauchen keinen Access Token. Du gibst nur
+die Adresse ein und meldest dich bei Home Assistant an. Home Assistant stellt die Tokens aus, die App prüft sie nur. Unter
+`/.well-known/oauth-protected-resource` nennt sie den Clients Home Assistant als Anmeldestelle (RFC 9728). Voraussetzung ist
+**Home Assistant 2026.10.1 oder neuer** (PKCE, Client-ID-Metadaten-Dokumente und Loopback-Weiterleitungen).
+
+1. `MCP-Server` einschalten, einen Host-Port für `8099` vergeben und einen Reverse-Proxy mit HTTPS davorsetzen.
+2. In den App-Optionen `Externe Adresse der App` auf diese HTTPS-Adresse setzen (z. B. `https://sweatbook.example.com`).
+3. Die Adresse von Home Assistant übernimmt die App beim Start aus *Einstellungen → System → Netzwerk* (externe URL). Ist
+   dort nichts eingetragen (z. B. nur Home Assistant Cloud), setzt du `Externe Adresse von Home Assistant` selbst. Home
+   Assistant muss unter dieser Adresse aus dem Browser erreichbar sein. Eine Änderung wirkt erst nach einem Neustart der App.
+4. Im Client `https://<adresse>/mcp` eintragen und der Anmeldung bei Home Assistant zustimmen. Das Profil in der App zeigt die
+   fertige Adresse.
+
+Fehlt eine der beiden Adressen, bleibt OAuth aus (Hinweis im Protokoll), und `/mcp` arbeitet wie bisher nur mit Access Token.
+
+**Wichtig: Die Zielgruppe (Audience) der Tokens wird nicht geprüft.** Home-Assistant-Tokens haben keine Audience. Die App
+nimmt deshalb **jedes** gültige Token eines echten Home-Assistant-Benutzers an, auch Long-Lived Access Tokens, und handelt
+mit voller Berechtigung (lesen und schreiben) als dieser Benutzer. Umgekehrt hält ein Client nach der Anmeldung ein Token,
+das in deinem ganzen Home Assistant gilt, nicht nur in Sweatbook. Melde dich nur bei Clients an, denen du vertraust. Für einen
+Zugriff, der nur lesen darf, nimm einen Access Token. System-Benutzer (z. B. andere Apps) werden abgelehnt.
+
 ## Datenschutz und Sicherheit
 
 - Die App ist nur über Home-Assistant-Ingress erreichbar. Der Server nimmt ausschließlich Verbindungen vom Supervisor an.
-  Einzige Ausnahme ist der MCP-Endpunkt `/mcp` (standardmäßig aus, siehe unten), der nur mit Access Token antwortet.
+  Einzige Ausnahme ist der MCP-Endpunkt `/mcp` (standardmäßig aus, siehe oben), der nur mit Access Token oder einem Token von
+  Home Assistant antwortet, und mit OAuth die öffentlichen Metadaten unter `/.well-known/oauth-protected-resource`.
+- Die App darf die Core-API von Home Assistant ansprechen (`homeassistant_api`), nutzt das aber nur, um beim Start die
+  externe URL zu lesen.
 - Jede Anfrage gehört zu dem Home-Assistant-Nutzer, der sie stellt; andere Nutzer sehen diese Daten nicht.
 - Die App ruft nichts im Internet ab.
 

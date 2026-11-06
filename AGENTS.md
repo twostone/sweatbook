@@ -231,8 +231,8 @@ Release“, danach in `release.yml` Tests und Image `ghcr.io/twostone/sweatbook:
 Workflows aus [twostone/hassio-workflows](https://github.com/twostone/hassio-workflows); App-Spezifisches steht in
 `scripts/smoke.sh`. Das
 ghcr-Paket muss **öffentlich** sein, sonst kann Home Assistant es nicht laden. `image:` in `config.yaml` ohne Tag.
-Actions nur mit vollem Commit-SHA pinnen. Voraussetzung im Repository: Einstellungen → Actions → General → „Allow GitHub
-Actions to create and approve pull requests“.
+Actions nur mit vollem Commit-SHA pinnen. Voraussetzung im Repository: Secret `RELEASE_PLEASE_TOKEN` (fine-grained PAT nur für dieses Repo: Contents, Pull requests und Issues lesen/schreiben).
+Damit bekommt der Release-PR die üblichen Checks; das eingebaute `GITHUB_TOKEN` löst keine weiteren Workflows aus.
 
 ## Regeln beim Ändern
 

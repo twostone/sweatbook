@@ -5,6 +5,26 @@
 export type Field = "weight" | "reps" | "distance" | "duration";
 export const VALUE_FIELDS: readonly Field[] = ["reps", "distance", "duration"];
 
+// Muscle groups, a fixed list (src/data/muscles.ts); German labels in logic/muscles.ts.
+export type Muscle =
+  | "chest"
+  | "upper_back"
+  | "lats"
+  | "lower_back"
+  | "front_delts"
+  | "side_delts"
+  | "rear_delts"
+  | "biceps"
+  | "triceps"
+  | "forearms"
+  | "core"
+  | "glutes"
+  | "quads"
+  | "hamstrings"
+  | "calves"
+  | "adductors";
+export type Muscles = { primary: Muscle[]; secondary: Muscle[] };
+
 export type TokenScope = "read" | "write";
 export type ApiToken = { id: string; name: string; scope: TokenScope; created_at: string; last_used_at: string | null };
 export type CreatedToken = { token: string; info: ApiToken };
@@ -19,9 +39,10 @@ export type Exercise = {
   note: string | null;
   archived: boolean;
   aliases: string[];
+  muscles: Muscles;
   last_used_at: string | null;
 };
-export type ExerciseInput = { name: string; fields: Field[]; note?: string | null; aliases?: string[] };
+export type ExerciseInput = { name: string; fields: Field[]; note?: string | null; aliases?: string[]; muscles?: Muscles };
 export type ExercisePatch = Partial<ExerciseInput> & { archived?: boolean };
 
 // weight_kg null = bodyweight (a value is added weight).
@@ -44,7 +65,7 @@ export type LastTime = { session_id: string; started_at: string; sets: SetLog[] 
 export type SessionExercise = {
   id: string; // block_exercise id: sets are added to this
   position: number;
-  exercise: { id: string; name: string; fields: Field[]; archived: boolean };
+  exercise: { id: string; name: string; fields: Field[]; archived: boolean; muscles: Muscles };
   note: string | null; // for this session only, unlike the catalog note
   sets: SetLog[];
   last_time: LastTime | null;

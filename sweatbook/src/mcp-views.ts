@@ -1,6 +1,7 @@
 import type * as z from "zod";
 import type { ExerciseTest } from "./data/tests.ts";
 import type { Exercise } from "./data/exercises.ts";
+import { sessionMuscles } from "./data/muscles.ts";
 import type { PlanItem, Range } from "./data/plan.ts";
 import type { ProgramSummary, ProgramTree } from "./data/programs.ts";
 import type { HistoryEntry, SessionSummary, SessionTree } from "./data/sessions.ts";
@@ -68,6 +69,8 @@ export const exerciseView = (e: Exercise): View<typeof schemas.exerciseView> => 
   name: e.name,
   fields: e.fields,
   aliases: e.aliases,
+  primary_muscles: e.muscles.primary,
+  secondary_muscles: e.muscles.secondary,
   archived: e.archived,
   note: e.note,
 });
@@ -93,6 +96,7 @@ export const sessionView = (t: SessionTree): View<typeof schemas.sessionView> =>
       last_time: e.last_time && { started_at: e.last_time.started_at, summary: summarizeSets(e.last_time.sets) },
     })),
   ),
+  muscles: sessionMuscles(t.blocks),
 });
 
 export const sessionListItem = (s: SessionSummary): View<typeof schemas.sessionListItem> => ({

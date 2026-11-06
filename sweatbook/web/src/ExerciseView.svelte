@@ -60,7 +60,7 @@
       {#if exercise.archived}<p class="archived label">Archiviert</p>{/if}
       {#key exercise.id}
         <ExerciseForm
-          initial={{ name: exercise.name, fields: exercise.fields, aliases: exercise.aliases, note: exercise.note ?? "" }}
+          initial={{ name: exercise.name, fields: exercise.fields, aliases: exercise.aliases, note: exercise.note ?? "", muscles: exercise.muscles }}
           exceptId={exercise.id}
           submitLabel="Speichern"
           onsave={save}

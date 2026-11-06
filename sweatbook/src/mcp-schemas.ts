@@ -1,5 +1,6 @@
 import * as z from "zod";
 import { FIELDS } from "./data/exercises.ts";
+import { MUSCLES, PRIMARY_WEIGHT, SECONDARY_WEIGHT } from "./data/muscles.ts";
 
 // Shapes of the MCP tools, written for a model: described fields with units, names instead of IDs where a person would
 // use a name, compact answers. The HTTP API keeps its own shapes (schemas.ts); inputs are normalized in mcp.ts and then
@@ -15,6 +16,12 @@ export const noteText = (max: number, what: string) => z.string().max(max).descr
 export const weeks = z.number().int().min(1).max(52).optional().describe("How many calendar weeks back, including the current one (default 4)");
 export const pageBefore = z.iso.datetime({ offset: true }).optional().describe("Only entries started before this time (ISO 8601), to page back");
 export const pageLimit = z.number().int().min(1).max(100).optional().describe("Maximum number of entries (default 20)");
+
+const muscle = z.enum(MUSCLES);
+const muscleInput = (role: string) =>
+  z.array(muscle).max(MUSCLES.length).optional().describe(`Muscle groups the exercise works ${role}. Replaces this list; a group named here leaves the other list.`);
+export const primaryMuscles = muscleInput("mainly (prime movers)");
+export const secondaryMuscles = muscleInput("assisting (synergists, stabilizers)");
 
 const setValues = {
   weight_kg: z.number().min(0).max(1000).nullable().optional().describe("Added weight in kg; leave out or null for bodyweight"),
@@ -74,9 +81,24 @@ export const exerciseView = z.object({
   name: text,
   fields: z.array(field).describe("Which values a set of this exercise has"),
   aliases: z.array(text),
+  primary_muscles: z.array(muscle),
+  secondary_muscles: z.array(muscle),
   archived: z.boolean(),
   note: maybeText,
 });
+export const muscleSummaryView = z
+  .object({
+    muscles: z.array(
+      z.object({
+        muscle,
+        sets: z.number().describe(`Weighted sets: ${PRIMARY_WEIGHT} per set as primary muscle, ${SECONDARY_WEIGHT} as secondary`),
+        primary_sets: z.number(),
+        secondary_sets: z.number(),
+      }),
+    ),
+    untagged_sets: z.number().describe("Sets of exercises without muscle groups; they count for no group"),
+  })
+  .describe("Weighted sets per muscle group, most trained first");
 const exerciseInSession = z.object({
   block_id: text.describe("Exercises sharing a block_id form a superset"),
   block_exercise_id: text.describe("Pass this to add_sets"),
@@ -97,6 +119,7 @@ export const sessionView = z.object({
   note: maybeText,
   plan: z.object({ program: text, week: z.number(), phase: maybeText, label: text, notes: z.array(text) }).nullable(),
   exercises: z.array(exerciseInSession),
+  muscles: muscleSummaryView,
 });
 export const sessionListItem = z.object({
   id: text,
@@ -183,16 +206,22 @@ export const progressView = z.object({
   ),
   best_est_1rm_kg: maybeNum,
 });
+// What a week and a period report alike.
+const totals = {
+  sessions: z.number(),
+  sets: z.number(),
+  volume_kg: z.number().describe("Σ kg × reps"),
+  exercises: z.array(z.object({ exercise_id: text, name: text, sets: z.number(), volume_kg: z.number() })),
+  muscles: muscleSummaryView,
+};
 export const summaryView = z.object({
-  weeks: z.array(
-    z.object({
-      week_start: text.describe("Monday, YYYY-MM-DD"),
-      sessions: z.number(),
-      sets: z.number(),
-      volume_kg: z.number(),
-      exercises: z.array(z.object({ exercise_id: text, name: text, sets: z.number(), volume_kg: z.number() })),
-    }),
-  ),
+  weeks: z.array(z.object({ week_start: text.describe("Monday, YYYY-MM-DD"), ...totals })),
+});
+export const periodView = z.object({
+  from: text.describe("First day, YYYY-MM-DD"),
+  to: text.describe("Last day, YYYY-MM-DD (included)"),
+  days: z.number(),
+  ...totals,
 });
 export const todayView = z.object({
   open_session: sessionView.nullable(),

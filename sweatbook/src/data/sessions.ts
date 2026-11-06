@@ -1,6 +1,7 @@
 import { isoNow, transaction, type Db } from "../db.ts";
 import { InvalidError, newId, NotFoundError } from "./common.ts";
 import { getExercise, type Field } from "./exercises.ts";
+import type { Muscles } from "./muscles.ts";
 import { plannedOfBlockExercise, planOfSession, PlanContext, type SessionPlan, type SessionPlanned } from "./plan.ts";
 import { SET_COLUMNS, toSet, type SetLog } from "./sets.ts";
 
@@ -20,7 +21,7 @@ export type LastTime = { session_id: string; started_at: string; sets: SetLog[] 
 export type SessionExercise = {
   id: string; // block_exercise id: sets are added to this
   position: number;
-  exercise: { id: string; name: string; fields: Field[]; archived: boolean };
+  exercise: { id: string; name: string; fields: Field[]; archived: boolean; muscles: Muscles };
   note: string | null; // for this session only, unlike the catalog note
   sets: SetLog[];
   last_time: LastTime | null;
@@ -172,25 +173,22 @@ export function getSession(db: Db, userId: string, id: string): SessionTree {
   const exercisesOf = db.prepare("SELECT id, position, exercise_id, note, planned_item_id FROM block_exercise WHERE block_id = ? ORDER BY position");
   const { planned_session_id, ...fields } = session;
   const ctx = new PlanContext(db, userId);
-  return {
-    ...fields,
-    plan: planOfSession(db, planned_session_id),
-    blocks: blocks.map((block) => ({
-      ...block,
-      exercises: (exercisesOf.all(block.id) as { id: string; position: number; exercise_id: string; note: string | null; planned_item_id: string | null }[]).map((be) => {
-        const exercise = getExercise(db, userId, be.exercise_id);
-        return {
-          id: be.id,
-          position: be.position,
-          exercise: { id: exercise.id, name: exercise.name, fields: exercise.fields, archived: exercise.archived },
-          note: be.note,
-          sets: setsOf(db, be.id),
-          last_time: lastTime(db, userId, be.exercise_id, session),
-          planned: plannedOfBlockExercise(ctx, be.planned_item_id, be.id, session.started_at.slice(0, 10)),
-        };
-      }),
-    })),
-  };
+  const tree: SessionBlock[] = blocks.map((block) => ({
+    ...block,
+    exercises: (exercisesOf.all(block.id) as { id: string; position: number; exercise_id: string; note: string | null; planned_item_id: string | null }[]).map((be) => {
+      const exercise = getExercise(db, userId, be.exercise_id);
+      return {
+        id: be.id,
+        position: be.position,
+        exercise: { id: exercise.id, name: exercise.name, fields: exercise.fields, archived: exercise.archived, muscles: exercise.muscles },
+        note: be.note,
+        sets: setsOf(db, be.id),
+        last_time: lastTime(db, userId, be.exercise_id, session),
+        planned: plannedOfBlockExercise(ctx, be.planned_item_id, be.id, session.started_at.slice(0, 10)),
+      };
+    }),
+  }));
+  return { ...fields, plan: planOfSession(db, planned_session_id), blocks: tree };
 }
 
 // The session still running, if any (there is at most one).

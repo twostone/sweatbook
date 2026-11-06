@@ -1,5 +1,6 @@
 import { isoNow, transaction, type Db } from "../db.ts";
 import { ConflictError, InvalidError, nameKey, newId, NotFoundError, tidy, toBool } from "./common.ts";
+import { noMuscles, normalizeMuscles, type Muscle, type MuscleRole, type Muscles } from "./muscles.ts";
 
 // Which fields a set of this exercise has, chosen per exercise: e.g. kg + reps, time, kg + time (weighted hang),
 // kg + distance + time (farmer's walk). Decides the set row in the UI and what the API accepts for a set.
@@ -30,11 +31,12 @@ export type Exercise = {
   note: string | null;
   archived: boolean;
   aliases: string[];
+  muscles: Muscles;
   last_used_at: string | null;
 };
 
-export type ExerciseInput = { name: string; fields: Field[]; note?: string | null; aliases?: string[] };
-export type ExercisePatch = { name?: string; fields?: Field[]; note?: string | null; aliases?: string[]; archived?: boolean };
+export type ExerciseInput = { name: string; fields: Field[]; note?: string | null; aliases?: string[]; muscles?: Muscles };
+export type ExercisePatch = { name?: string; fields?: Field[]; note?: string | null; aliases?: string[]; muscles?: Muscles; archived?: boolean };
 
 type ExerciseRow = {
   id: string;
@@ -67,15 +69,34 @@ function aliasMap(db: Db): Map<string, string[]> {
   return map;
 }
 
+// Muscle groups of every exercise (one query, like the aliases); rows come in canonical order from normalizeMuscles.
+export function muscleMap(db: Db): Map<string, Muscles> {
+  const rows = db.prepare("SELECT exercise_id, muscle, role FROM exercise_muscle").all() as {
+    exercise_id: string;
+    muscle: Muscle;
+    role: MuscleRole;
+  }[];
+  const map = new Map<string, Muscles>();
+  for (const r of rows) {
+    let m = map.get(r.exercise_id);
+    if (!m) map.set(r.exercise_id, (m = noMuscles()));
+    m[r.role].push(r.muscle);
+  }
+  // Stored order is not guaranteed; the API answers in the list's order.
+  for (const [id, m] of map) map.set(id, normalizeMuscles(m) ?? m);
+  return map;
+}
+
 export const fieldsOf = (row: Record<string, unknown>): Field[] => FIELDS.filter((f) => toBool(row[FLAG[f]] as number));
 
-const toExercise = (row: ExerciseRow, aliases: string[]): Exercise => ({
+const toExercise = (row: ExerciseRow, aliases: string[], muscles: Muscles): Exercise => ({
   id: row.id,
   name: row.name,
   fields: fieldsOf(row),
   note: row.note,
   archived: toBool(row.archived),
   aliases,
+  muscles,
   last_used_at: row.last_used_at,
 });
 
@@ -83,10 +104,11 @@ const toExercise = (row: ExerciseRow, aliases: string[]): Exercise => ({
 // Most recently used first, never used ones after that by name.
 export function listExercises(db: Db, userId: string, query?: string): Exercise[] {
   const aliases = aliasMap(db);
+  const muscles = muscleMap(db);
   const rows = db.prepare(EXERCISE_SELECT).all(userId) as ExerciseRow[];
   const key = query ? nameKey(query) : "";
   return rows
-    .map((r) => toExercise(r, aliases.get(r.id) ?? []))
+    .map((r) => toExercise(r, aliases.get(r.id) ?? [], muscles.get(r.id) ?? noMuscles()))
     .filter((e) => !key || [e.name, ...e.aliases].some((n) => nameKey(n).includes(key)))
     .sort(
       (a, b) =>
@@ -97,7 +119,23 @@ export function listExercises(db: Db, userId: string, query?: string): Exercise[
 export function getExercise(db: Db, userId: string, id: string): Exercise {
   const row = db.prepare(`${EXERCISE_SELECT} WHERE e.id = ?`).get(userId, id) as ExerciseRow | undefined;
   if (!row) throw new NotFoundError("exercise");
-  return toExercise(row, aliasMap(db).get(id) ?? []);
+  return toExercise(row, aliasMap(db).get(id) ?? [], musclesOf(db, id));
+}
+
+function musclesOf(db: Db, exerciseId: string): Muscles {
+  const rows = db.prepare("SELECT muscle, role FROM exercise_muscle WHERE exercise_id = ?").all(exerciseId) as { muscle: Muscle; role: MuscleRole }[];
+  const m = noMuscles();
+  for (const r of rows) m[r.role].push(r.muscle);
+  return normalizeMuscles(m) ?? m;
+}
+
+// Replaces the whole assignment. A group in both lists is refused: an exercise works a muscle either mainly or assisting.
+function writeMuscles(db: Db, exerciseId: string, muscles: Muscles): void {
+  const clean = normalizeMuscles(muscles);
+  if (!clean) throw new InvalidError("a muscle group is either primary or secondary");
+  db.prepare("DELETE FROM exercise_muscle WHERE exercise_id = ?").run(exerciseId);
+  const insert = db.prepare("INSERT INTO exercise_muscle (exercise_id, muscle, role) VALUES (?, ?, ?)");
+  for (const role of ["primary", "secondary"] as const) for (const muscle of clean[role]) insert.run(exerciseId, muscle, role);
 }
 
 // Aliases cleaned up: spaces collapsed, duplicates and the exercise's own name dropped.
@@ -146,6 +184,7 @@ export function insertExercise(db: Db, userId: string, input: ExerciseInput): st
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
   ).run(id, userId, name, ...flags(fields), input.note ?? null, isoNow());
   writeAliases(db, userId, id, aliases);
+  if (input.muscles) writeMuscles(db, id, input.muscles);
   return id;
 }
 
@@ -188,6 +227,7 @@ export function updateExercise(db: Db, userId: string, id: string, patch: Exerci
       id,
     );
     writeAliases(db, userId, id, aliases);
+    if (patch.muscles !== undefined) writeMuscles(db, id, patch.muscles);
   });
   return getExercise(db, userId, id);
 }

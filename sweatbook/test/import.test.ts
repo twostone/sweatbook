@@ -94,3 +94,23 @@ test("import: load.kg_female becomes the women's weight of the line", async () =
   const man = (await setup().call("POST", "/api/programs/import", { file: example() })).json.program;
   assert.equal(man.weeks[1].sessions[1].items[0].weight_kg, 40);
 });
+
+test("import: muscle groups of the file go to new exercises, found ones keep theirs", async () => {
+  const { call } = setup();
+  const own = (await call("POST", "/api/exercises", { name: "Dead Hang", fields: ["duration"], muscles: { primary: ["forearms"], secondary: [] } })).json;
+  const file = example();
+  for (const e of file.exercises) e.muscles = { primary: ["lats"], secondary: ["biceps"] };
+  assert.equal((await call("POST", "/api/programs/import", { file })).status, 201);
+  const catalog = (await call("GET", "/api/exercises")).json as any[];
+  assert.deepEqual(catalog.find((e) => e.id === own.id).muscles, { primary: ["forearms"], secondary: [] });
+  assert.deepEqual(catalog.find((e) => e.name === "Farmer's Walk").muscles, { primary: ["lats"], secondary: ["biceps"] });
+});
+
+test("import: a muscle group in both roles names the exercise", async () => {
+  const { call } = setup();
+  const file = example();
+  file.exercises[0].muscles = { primary: ["lats"], secondary: ["lats"] };
+  const res = await call("POST", "/api/programs/import", { file });
+  assert.equal(res.status, 400);
+  assert.match(res.json.error, /^exercises "bank": /);
+});

@@ -1,12 +1,14 @@
 import { isoNow, transaction, type Db } from "../db.ts";
 import { InvalidError, nameKey, newId } from "./common.ts";
 import { assertUsable, insertExercise, listExercises, type Exercise, type Field } from "./exercises.ts";
+import type { Muscles } from "./muscles.ts";
 import type { Range } from "./plan.ts";
 import { checkItem, getProgram, insertPlannedSession, insertProgram, resolvePhase, writeItem, type PlanItemInput, type ProgramTree } from "./programs.ts";
 import { createTest, type TestKind } from "./tests.ts";
 
 // A whole program from one JSON file (the shape is validated in app.ts; what depends on the catalog, here). Exercises are
-// matched by name or alias, missing ones are created. Everything or nothing.
+// matched by name or alias, missing ones are created (with fields and muscles of the file; found ones stay as they are).
+// Everything or nothing.
 export type ImportLine =
   | { text: string }
   | {
@@ -25,7 +27,7 @@ export type ImportLine =
 
 export type ImportFile = {
   program: { name: string; start_date: string; start_week?: number };
-  exercises: { key: string; name: string; fields: Field[] }[];
+  exercises: { key: string; name: string; fields: Field[]; muscles?: Muscles }[];
   tests?: { exercise: string; tested_on: string; kind: TestKind; weight_kg?: number; reps?: number; distance_m?: number; duration_s?: number; note?: string }[];
   weeks: { number: number; phase?: string; deload?: boolean; sessions: { label: string; items: ImportLine[] }[] }[];
 };
@@ -45,6 +47,15 @@ export function importProgram(db: Db, userId: string, file: ImportFile, dryRun =
   }
 }
 
+// Errors name the exercise, like the other parts of the file.
+function insertFileExercise(db: Db, userId: string, e: ImportFile["exercises"][number]): string {
+  try {
+    return insertExercise(db, userId, { name: e.name, fields: e.fields, muscles: e.muscles });
+  } catch (err) {
+    throw err instanceof InvalidError ? new InvalidError(`exercises "${e.key}": ${err.message}`) : err;
+  }
+}
+
 function run(db: Db, userId: string, file: ImportFile): ImportResult {
   const existing = listExercises(db, userId);
   const catalog = new Map<string, Exercise>(); // name or alias -> exercise
@@ -56,7 +67,7 @@ function run(db: Db, userId: string, file: ImportFile): ImportResult {
     const found = catalog.get(nameKey(e.name));
     if (found) assertUsable(found);
     else newExercises.push(e.name);
-    ids.set(e.key, found?.id ?? insertExercise(db, userId, { name: e.name, fields: e.fields }));
+    ids.set(e.key, found?.id ?? insertFileExercise(db, userId, e));
   }
   const exerciseId = (key: string, where: string): string => {
     const id = ids.get(key);

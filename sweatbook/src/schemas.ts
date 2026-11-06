@@ -1,5 +1,6 @@
 import * as z from "zod";
 import { FIELDS } from "./data/exercises.ts";
+import { MUSCLES } from "./data/muscles.ts";
 import type { PlanItemInput } from "./data/programs.ts";
 
 // Request shapes shared by the HTTP API (app.ts) and the MCP tools (mcp.ts).
@@ -18,15 +19,20 @@ export const MAX_ALIASES = 10;
 export const name = z.string().trim().min(1).max(80);
 // Which fields its sets have; that one of them is reps, distance or time is checked in data/exercises.ts.
 export const fields = z.array(z.enum(FIELDS)).min(1).max(FIELDS.length);
+// Primary and secondary muscle groups; a group in both lists is refused in data/exercises.ts.
+const muscleList = z.array(z.enum(MUSCLES)).max(MUSCLES.length);
+export const muscles = z.object({ primary: muscleList, secondary: muscleList });
 export const exerciseBody = z.object({
   name,
   fields,
+  muscles: muscles.optional(),
   note: optionalText(1000),
   aliases: z.array(name).max(MAX_ALIASES).optional(),
 });
 export const exercisePatch = z.object({
   name: name.optional(),
   fields: fields.optional(),
+  muscles: muscles.optional(),
   note: optionalText(1000),
   aliases: z.array(name).max(MAX_ALIASES).optional(),
   archived: z.boolean().optional(),
@@ -155,7 +161,7 @@ export const importBody = z.object({
   dry_run: z.boolean().optional(), // check and report, create nothing
   file: z.strictObject({
     program: z.strictObject({ name, start_date: day, start_week: z.number().int().min(1).max(MAX_IMPORT_WEEKS).optional() }),
-    exercises: z.array(z.strictObject({ key: importKey, name, fields })).max(MAX_IMPORT_ROWS),
+    exercises: z.array(z.strictObject({ key: importKey, name, fields, muscles: muscles.optional() })).max(MAX_IMPORT_ROWS),
     tests: z
       .array(
         z.strictObject({

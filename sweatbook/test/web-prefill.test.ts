@@ -18,7 +18,7 @@ const log = (weight_kg: number | null, reps: number | null, extra: Partial<SetLo
 const exercise = (sets: SetLog[], lastSets: SetLog[] | null): SessionExercise => ({
   id: "be",
   position: 1,
-  exercise: { id: "e", name: "Kniebeuge", fields: ["weight", "reps"], archived: false },
+  exercise: { id: "e", name: "Kniebeuge", fields: ["weight", "reps"], archived: false, muscles: { primary: [], secondary: [] } },
   note: null,
   sets,
   planned: null,

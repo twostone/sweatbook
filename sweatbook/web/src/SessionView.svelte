@@ -5,6 +5,7 @@
   import { blockLabel, formatSessionDate } from "./logic/format";
   import { cardLine } from "./logic/plan";
   import { blockStatus, doneCount, overviewTarget } from "./logic/flow";
+  import { formatWeightedSets, MUSCLE_LABELS, sessionMuscles } from "./logic/muscles";
   import { goUp, navigate, paths } from "./router.svelte";
   import { changeSession, finishSession, openSheet } from "./store.svelte";
   import type { SessionBlock, SessionTree } from "./types";
@@ -15,6 +16,9 @@
   let reordering = $state(false);
   const target = $derived(overviewTarget(session.blocks));
   const done = $derived(doneCount(session.blocks));
+  // Derived here, not taken from the server: sets answer with themselves only and land in this tree.
+  const muscles = $derived(sessionMuscles(session.blocks));
+  const maxSets = $derived(Math.max(...muscles.muscles.map((m) => m.sets), 1));
 
   const addExercise = () => openSheet({ kind: "add-exercise", target: { sessionId: session.id, blockId: null, openAfter: false }, query: "" });
 
@@ -112,6 +116,26 @@
         {reordering ? "Reihenfolge fertig" : "Reihenfolge ändern"}
       </button>
     {/if}
+    {#if muscles.muscles.length || muscles.untagged_sets}
+      <section class="card muscles" aria-labelledby="muscles-title">
+        <h2 id="muscles-title" class="label">Muskelgruppen</h2>
+        {#if muscles.muscles.length}
+          <ul>
+            {#each muscles.muscles as m (m.muscle)}
+              <li>
+                <span class="muscle-name">{MUSCLE_LABELS[m.muscle]}</span>
+                <span class="muscle-sets">{formatWeightedSets(m.sets)}</span>
+                <span class="muscle-bar" aria-hidden="true"><span style:width="{(m.sets / maxSets) * 100}%"></span></span>
+              </li>
+            {/each}
+          </ul>
+          <p class="muted hint">Primär zählt ein Satz voll, sekundär halb.</p>
+        {/if}
+        {#if muscles.untagged_sets}
+          <p class="muted hint">{muscles.untagged_sets} {muscles.untagged_sets === 1 ? "Satz" : "Sätze"} ohne Muskelgruppe</p>
+        {/if}
+      </section>
+    {/if}
   </main>
 
   <footer>
@@ -128,6 +152,52 @@
 </div>
 
 <style>
+  .muscles {
+    margin-top: 8px;
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .muscles h2 {
+    margin: 0;
+  }
+  .muscles ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .muscles li {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 4px 12px;
+  }
+  .muscle-name {
+    font-weight: 600;
+  }
+  .muscle-sets {
+    font-variant-numeric: tabular-nums;
+    color: var(--muted);
+  }
+  .muscle-bar {
+    grid-column: 1 / -1;
+    height: 6px;
+    border-radius: 3px;
+    background: var(--line);
+    overflow: hidden;
+  }
+  .muscle-bar span {
+    display: block;
+    height: 100%;
+    background: var(--accent-ink);
+  }
+  .hint {
+    margin: 0;
+    font-size: 13px;
+  }
   .plan-note {
     margin: 0;
     padding: 0 4px;

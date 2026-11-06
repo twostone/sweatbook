@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.11.0](https://github.com/twostone/sweatbook/compare/v1.10.1...v1.11.0) (2026-11-06)
+
+
+### Neu
+
+* Muskelgruppen an Übungen und Auswertung je Session und Woche ([#47](https://github.com/twostone/sweatbook/issues/47)) ([ac25f66](https://github.com/twostone/sweatbook/commit/ac25f66b7857a1a5fcb042683b4cb220f36d0e12))
+
 ## [1.10.1](https://github.com/twostone/sweatbook/compare/v1.10.0...v1.10.1) (2026-11-05)
 
 

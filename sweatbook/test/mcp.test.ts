@@ -141,6 +141,12 @@ test("mcp: tools act as the token's user, exercises by name, answers are compact
   assert.equal((await call(a, "get_training_summary", { weeks: 2 })).data.weeks.length, 2);
   assert.deepEqual(logged.muscles.muscles.map((x: any) => [x.muscle, x.sets]), [["quads", 4], ["lower_back", 2], ["glutes", 2]]);
   assert.equal((await call(a, "get_training_summary", { weeks: 1 })).data.weeks[0].muscles.muscles[0].muscle, "quads");
+  const now = new Date();
+  const day = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  const read = createToken(db, anna, { name: "r", scope: "read" }).token;
+  const period = (await call(read, "get_period_summary", { from: day, to: day })).data;
+  assert.deepEqual([period.days, period.sets, period.muscles.muscles[0].muscle], [1, 4, "quads"]);
+  assert.equal((await call(read, "get_period_summary", { from: day, to: "2000-01-01" })).isError, true);
 
   // refused input comes back as a tool error that says what to do
   const unknown = await call(a, "log_sets", { exercise: "Kniebeu", sets: [{ reps: 5 }] });

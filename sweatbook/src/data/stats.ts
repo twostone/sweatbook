@@ -1,6 +1,7 @@
 import type { Db } from "../db.ts";
 import { getExercise, muscleMap } from "./exercises.ts";
-import { muscleSummary, noMuscles, type MuscleSummary } from "./muscles.ts";
+import { InvalidError } from "./common.ts";
+import { muscleSummary, noMuscles, type Muscles, type MuscleSummary } from "./muscles.ts";
 
 // Evaluations over the logged sets of one user, read-only. Computed when asked, nothing is stored.
 export const DEFAULT_WEEKS = 4;
@@ -61,9 +62,13 @@ function weekStarts(weeks: number, now: Date): string[] {
 
 type Row = SetPoint & { session_id: string; started_at: string; exercise_id: string; name: string };
 
-function rowsSince(db: Db, userId: string, sinceDay: string, exerciseId?: string): Row[] {
-  // Local midnight of the first day, as the UTC string the table holds.
-  const since = new Date(`${sinceDay}T00:00:00`).toISOString();
+// Local midnight of a day, as the UTC string the table holds.
+const localMidnight = (day: string) => new Date(`${day}T00:00:00`).toISOString();
+
+// Sets of sessions started from fromDay up to and including toDay (null = open end), local days.
+function rowsBetween(db: Db, userId: string, fromDay: string, toDay: string | null, exerciseId?: string): Row[] {
+  const since = localMidnight(fromDay);
+  const until = toDay === null ? null : localMidnight(addDays(toDay, 1));
   return db
     .prepare(
       `SELECT s.id AS session_id, s.started_at, be.exercise_id, e.name, l.weight_kg, l.reps, l.duration_s, l.distance_m
@@ -72,14 +77,13 @@ function rowsSince(db: Db, userId: string, sinceDay: string, exerciseId?: string
        JOIN block b ON b.id = be.block_id
        JOIN session s ON s.id = b.session_id
        JOIN exercise e ON e.id = be.exercise_id
-       WHERE s.user_id = ? AND s.started_at >= ? AND (? IS NULL OR be.exercise_id = ?)
+       WHERE s.user_id = ? AND s.started_at >= ? AND (? IS NULL OR s.started_at < ?) AND (? IS NULL OR be.exercise_id = ?)
        ORDER BY s.started_at, l.position`,
     )
-    .all(userId, since, exerciseId ?? null, exerciseId ?? null) as Row[];
+    .all(userId, since, until, until, exerciseId ?? null, exerciseId ?? null) as Row[];
 }
 
-export type TrainingWeek = {
-  week_start: string; // Monday, YYYY-MM-DD
+export type Totals = {
   sessions: number;
   sets: number;
   volume_kg: number;
@@ -87,30 +91,56 @@ export type TrainingWeek = {
   muscles: MuscleSummary;
 };
 
+// What a week and a period report alike, so both count the same way.
+function totalsOf(rows: Row[], musclesOf: (exerciseId: string) => Muscles): Totals {
+  const byExercise = new Map<string, Row[]>();
+  for (const r of rows) byExercise.set(r.exercise_id, [...(byExercise.get(r.exercise_id) ?? []), r]);
+  return {
+    sessions: new Set(rows.map((r) => r.session_id)).size,
+    sets: rows.length,
+    volume_kg: volumeOf(rows),
+    exercises: [...byExercise.entries()]
+      .map(([exercise_id, sets]) => ({ exercise_id, name: sets[0]!.name, sets: sets.length, volume_kg: volumeOf(sets) }))
+      .sort((a, b) => b.sets - a.sets || a.name.localeCompare(b.name, "de")),
+    muscles: muscleSummary(rows, musclesOf),
+  };
+}
+
+function catalogMuscles(db: Db): (exerciseId: string) => Muscles {
+  const muscles = muscleMap(db);
+  return (id) => muscles.get(id) ?? noMuscles();
+}
+
+export type TrainingWeek = Totals & { week_start: string }; // Monday, YYYY-MM-DD
+
 // Per week (oldest first, empty weeks included so gaps show): sessions, sets, volume, the same per exercise, and weighted
 // sets per muscle group.
 export function trainingSummary(db: Db, userId: string, opts: { weeks?: number; now?: Date } = {}): { weeks: TrainingWeek[] } {
   const starts = weekStarts(opts.weeks ?? DEFAULT_WEEKS, opts.now ?? new Date());
-  const rows = rowsSince(db, userId, starts[0]!);
-  const muscles = muscleMap(db);
-  const musclesOf = (id: string) => muscles.get(id) ?? noMuscles();
+  const rows = rowsBetween(db, userId, starts[0]!, null);
+  const musclesOf = catalogMuscles(db);
   return {
-    weeks: starts.map((week_start) => {
-      const inWeek = rows.filter((r) => mondayOf(new Date(r.started_at)) === week_start);
-      const byExercise = new Map<string, Row[]>();
-      for (const r of inWeek) byExercise.set(r.exercise_id, [...(byExercise.get(r.exercise_id) ?? []), r]);
-      return {
-        week_start,
-        sessions: new Set(inWeek.map((r) => r.session_id)).size,
-        sets: inWeek.length,
-        volume_kg: volumeOf(inWeek),
-        exercises: [...byExercise.entries()]
-          .map(([exercise_id, sets]) => ({ exercise_id, name: sets[0]!.name, sets: sets.length, volume_kg: volumeOf(sets) }))
-          .sort((a, b) => b.sets - a.sets || a.name.localeCompare(b.name, "de")),
-        muscles: muscleSummary(inWeek, musclesOf),
-      };
-    }),
+    weeks: starts.map((week_start) => ({
+      week_start,
+      ...totalsOf(rows.filter((r) => mondayOf(new Date(r.started_at)) === week_start), musclesOf),
+    })),
   };
+}
+
+// A guard against accidental huge queries; a year covers any plan phase or season.
+export const MAX_PERIOD_DAYS = 366;
+const MS_PER_DAY = 86_400_000;
+
+export type PeriodSummary = Totals & { from: string; to: string; days: number };
+
+// The same totals for any span of local days, both ends included (e.g. a plan phase or a month).
+export function periodSummary(db: Db, userId: string, period: { from: string; to: string }): PeriodSummary {
+  const { from, to } = period;
+  if (from > to) throw new InvalidError("from must not be after to");
+  // Noon avoids daylight-saving shifts in the day count.
+  const days = Math.round((new Date(`${to}T12:00:00`).getTime() - new Date(`${from}T12:00:00`).getTime()) / MS_PER_DAY) + 1;
+  if (days > MAX_PERIOD_DAYS) throw new InvalidError(`a period spans at most ${MAX_PERIOD_DAYS} days`);
+  return { from, to, days, ...totalsOf(rowsBetween(db, userId, from, to), catalogMuscles(db)) };
 }
 
 export type ProgressSession = {
@@ -130,7 +160,7 @@ export function exerciseProgress(
   opts: { weeks?: number; now?: Date } = {},
 ): { exercise: { id: string; name: string }; sessions: ProgressSession[]; best_est_1rm_kg: number | null } {
   const exercise = getExercise(db, userId, exerciseId);
-  const rows = rowsSince(db, userId, weekStarts(opts.weeks ?? DEFAULT_WEEKS, opts.now ?? new Date())[0]!, exerciseId);
+  const rows = rowsBetween(db, userId, weekStarts(opts.weeks ?? DEFAULT_WEEKS, opts.now ?? new Date())[0]!, null, exerciseId);
   const bySession = new Map<string, Row[]>();
   for (const r of rows) bySession.set(r.session_id, [...(bySession.get(r.session_id) ?? []), r]);
   const sessions = [...bySession.values()]

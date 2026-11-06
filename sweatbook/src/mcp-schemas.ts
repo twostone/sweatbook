@@ -206,17 +206,22 @@ export const progressView = z.object({
   ),
   best_est_1rm_kg: maybeNum,
 });
+// What a week and a period report alike.
+const totals = {
+  sessions: z.number(),
+  sets: z.number(),
+  volume_kg: z.number().describe("Σ kg × reps"),
+  exercises: z.array(z.object({ exercise_id: text, name: text, sets: z.number(), volume_kg: z.number() })),
+  muscles: muscleSummaryView,
+};
 export const summaryView = z.object({
-  weeks: z.array(
-    z.object({
-      week_start: text.describe("Monday, YYYY-MM-DD"),
-      sessions: z.number(),
-      sets: z.number(),
-      volume_kg: z.number(),
-      exercises: z.array(z.object({ exercise_id: text, name: text, sets: z.number(), volume_kg: z.number() })),
-      muscles: muscleSummaryView,
-    }),
-  ),
+  weeks: z.array(z.object({ week_start: text.describe("Monday, YYYY-MM-DD"), ...totals })),
+});
+export const periodView = z.object({
+  from: text.describe("First day, YYYY-MM-DD"),
+  to: text.describe("Last day, YYYY-MM-DD (included)"),
+  days: z.number(),
+  ...totals,
 });
 export const todayView = z.object({
   open_session: sessionView.nullable(),

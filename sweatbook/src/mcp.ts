@@ -30,7 +30,7 @@ import {
 } from "./data/programs.ts";
 import { createSession, deleteSession, exerciseHistory, findOpenSession, getSession, listSessions, updateSession } from "./data/sessions.ts";
 import { addSets, deleteSet, updateSet, type SetInput } from "./data/sets.ts";
-import { exerciseProgress, trainingSummary } from "./data/stats.ts";
+import { exerciseProgress, MAX_PERIOD_DAYS, periodSummary, trainingSummary } from "./data/stats.ts";
 import { replaceRoles } from "./data/muscles.ts";
 import { createTest, deleteTest, listTests } from "./data/tests.ts";
 import type { TokenScope } from "./data/tokens.ts";
@@ -201,6 +201,13 @@ export function createMcpServer(db: Db, who: { userId: string; scope: TokenScope
   );
   tool("get_training_summary", "Per calendar week (oldest first, empty weeks included): trainings, sets, volume, the same per exercise, and weighted sets per muscle group (a set counts 1 for each primary and 0.5 for each secondary muscle of its exercise).", { weeks: m.weeks }, m.summaryView, (a) =>
     trainingSummary(db, uid, { weeks: a.weeks }),
+  );
+  tool(
+    "get_period_summary",
+    `Totals for a date range (local days, both included, at most ${MAX_PERIOD_DAYS} days): trainings, sets, volume, the same per exercise, and weighted sets per muscle group (1 per primary, 0.5 per secondary muscle). Use it for a plan phase, a month or any other span.`,
+    { from: m.isoDay.describe("First day, YYYY-MM-DD"), to: m.isoDay.describe("Last day, YYYY-MM-DD (included)") },
+    m.periodView,
+    (a) => periodSummary(db, uid, a),
   );
   tool("list_tests", "Test values (1RM or best performance) of an exercise, newest first.", { exercise: m.exerciseRef }, list("tests", m.testView), (a) => ({
     tests: listTests(db, uid, exercise(a.exercise).id).map((t) => v.testView({ ...t, exercise_name: undefined })),
@@ -490,7 +497,7 @@ export function createMcpServer(db: Db, who: { userId: string; scope: TokenScope
       const n = Number.parseInt(weeks ?? "", 10);
       return prompt(
         `Analyze my training of the last ${Number.isInteger(n) && n > 0 ? Math.min(n, 52) : WEEKS_DEFAULT} weeks. ` +
-          "Call get_training_summary first, then get_exercise_progress for the three or four most trained exercises. " +
+          "Call get_training_summary first (or get_period_summary for a specific date range), then get_exercise_progress for the three or four most trained exercises. " +
           "Report training frequency, volume trend, progress (estimated 1RM and top sets) and gaps or imbalances (also between muscle groups, from the weighted sets per muscle; mention untagged sets if many), then give two or three concrete suggestions. " +
           "Answer in my language and keep it short. Do not change any data.",
       );

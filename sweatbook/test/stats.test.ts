@@ -5,9 +5,9 @@ import { addBlock } from "../src/data/blocks.ts";
 import { createExercise } from "../src/data/exercises.ts";
 import { createSession } from "../src/data/sessions.ts";
 import { addSets, type SetInput } from "../src/data/sets.ts";
-import { estimatedOneRm, exerciseProgress, topSet, trainingSummary, volumeOf } from "../src/data/stats.ts";
+import { estimatedOneRm, exerciseProgress, MAX_PERIOD_DAYS, periodSummary, topSet, trainingSummary, volumeOf } from "../src/data/stats.ts";
 import { resolveUser } from "../src/data/users.ts";
-import { NotFoundError } from "../src/data/common.ts";
+import { InvalidError, NotFoundError } from "../src/data/common.ts";
 import { muscleSummary, noMuscles, replaceRoles, type Muscles } from "../src/data/muscles.ts";
 import { updateExercise } from "../src/data/exercises.ts";
 
@@ -120,4 +120,46 @@ test("trainingSummary: weighted sets per muscle group per week", () => {
     ],
     untagged_sets: 1,
   });
+});
+
+test("periodSummary: both ends included, local days, only the asking user's sets", () => {
+  const { db, uid, squat, dips, train } = setup();
+  updateExercise(db, uid, squat.id, { muscles: { primary: ["quads"], secondary: ["glutes"] } });
+  train(squat.id, at(10, 19), [{ weight_kg: 100, reps: 5 }]); // day before `from`
+  train(squat.id, at(10, 20), [{ weight_kg: 100, reps: 5 }, { weight_kg: 100, reps: 5 }]); // `from`
+  train(dips.id, at(10, 27), [{ reps: 10 }]); // `to`
+  train(squat.id, at(10, 28), [{ weight_kg: 100, reps: 5 }]); // day after `to`
+  train(squat.id, at(10, 22), [{ weight_kg: 50, reps: 5 }], resolveUser(db, "ha-2", null).id);
+  const p = periodSummary(db, uid, { from: "2026-10-20", to: "2026-10-27" });
+  assert.deepEqual([p.from, p.to, p.days, p.sessions, p.sets, p.volume_kg], ["2026-10-20", "2026-10-27", 8, 2, 3, 1000]);
+  assert.deepEqual(p.muscles, {
+    muscles: [
+      { muscle: "quads", sets: 2, primary_sets: 2, secondary_sets: 0 },
+      { muscle: "glutes", sets: 1, primary_sets: 0, secondary_sets: 2 },
+    ],
+    untagged_sets: 1,
+  });
+  assert.equal(periodSummary(db, uid, { from: "2026-10-27", to: "2026-10-27" }).sets, 1, "a single day");
+});
+
+test("periodSummary: two whole weeks add up to the weeks of trainingSummary", () => {
+  const { db, uid, squat, dips, train } = setup();
+  updateExercise(db, uid, squat.id, { muscles: { primary: ["quads"], secondary: [] } });
+  train(squat.id, at(10, 19), [{ weight_kg: 100, reps: 5 }]); // Monday last week
+  train(dips.id, at(10, 25), [{ reps: 10 }]); // Sunday last week
+  train(squat.id, at(10, 29), [{ weight_kg: 90, reps: 3 }, { weight_kg: 90, reps: 3 }]); // this week
+  const { weeks } = trainingSummary(db, uid, { weeks: 2, now: NOW });
+  const p = periodSummary(db, uid, { from: "2026-10-19", to: "2026-11-01" });
+  assert.equal(p.sets, weeks[0]!.sets + weeks[1]!.sets);
+  assert.equal(p.volume_kg, weeks[0]!.volume_kg + weeks[1]!.volume_kg);
+  assert.equal(p.muscles.muscles[0]!.sets, weeks[0]!.muscles.muscles[0]!.sets + weeks[1]!.muscles.muscles[0]!.sets);
+  assert.equal(p.muscles.untagged_sets, 1);
+});
+
+test("periodSummary: from after to and too long spans are refused", () => {
+  const { db, uid } = setup();
+  assert.throws(() => periodSummary(db, uid, { from: "2026-10-28", to: "2026-10-27" }), InvalidError);
+  assert.throws(() => periodSummary(db, uid, { from: "2025-01-01", to: "2026-01-02" }), InvalidError);
+  assert.equal(periodSummary(db, uid, { from: "2026-01-01", to: "2026-12-31" }).days, 365);
+  assert.equal(MAX_PERIOD_DAYS, 366);
 });

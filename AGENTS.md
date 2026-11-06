@@ -90,7 +90,7 @@ set_log         Satz: weight_kg (null = Körpergewicht), reps, duration_s, dista
 - **Muskelgruppen:** feste Liste `MUSCLES` (16 Gruppen, englische Schlüssel) in `data/muscles.ts`, deutsche Labels nur in
   `web/src/logic/muscles.ts` (ein Test hält beide gleich). Eine Übung hat `muscles: { primary, secondary }`; eine Gruppe in
   beiden Listen = 400, fehlt das Feld beim Ändern, bleibt es. Auswertung = **gewichtete Sätze**: primär 1, sekundär 0,5
-  (Faustregel), dazu `untagged_sets` (Sätze von Übungen ohne Gruppe). Je Woche in `trainingSummary`, je Session
+  (Faustregel), dazu `untagged_sets` (Sätze von Übungen ohne Gruppe). Je Woche in `trainingSummary`, je Zeitraum in `periodSummary`, je Session
   `sessionMuscles` aus dem Baum (nicht im Baum gespeichert: Sätze antworten nur mit sich selbst, deshalb rechnet der
   Client dieselbe Regel selbst). Aufwärmsätze zählen mit (es gibt kein Aufwärm-Flag).
 - **Übungen werden archiviert, nicht gelöscht**, sobald sie benutzt sind (`ON DELETE RESTRICT`, API 409). Archivierte
@@ -187,7 +187,8 @@ UI). Ein `read`-Token bekommt nur Lese-Tools. Tokens verwaltet man über `GET/PO
 - **Kompakte Ausgaben** (`mcp-views.ts`) mit `outputSchema` und `structuredContent` (+ derselbe JSON-Text): Session als Übungsliste mit
   `summary` („3×5 @ 100 kg“), Plan mit Zeilentext („3×5–8 @ 80 kg (70 % von …)“). Das SDK prüft jede Antwort gegen das Schema.
   Neue Tools brauchen immer ein Ausgabe-Schema und beschriebene Eingaben (ein Test prüft das).
-- **Auswertung und Eintragen:** `get_today`, `get_exercise_progress`, `get_training_summary` (`data/stats.ts`: Volumen, Epley-1RM,
+- **Auswertung und Eintragen:** `get_today`, `get_exercise_progress`, `get_training_summary`, `get_period_summary` (frei wählbarer
+  Zeitraum von–bis, lokale Tage inklusive, höchstens 366 Tage; dieselben Summen wie eine Woche) (`data/stats.ts`: Volumen, Epley-1RM,
   gewichtete Sätze je Muskelgruppe, Wochen ab Montag in der Zeitzone des Prozesses; die Session-Sicht trägt dieselbe Auswertung;
   `create_exercise`/`update_exercise` nehmen `primary_muscles`/`secondary_muscles`, eine Liste ersetzt ihre Rolle und nimmt
   ihre Gruppen aus der anderen) und `log_sets` (`data/log.ts`: offene Session oder neue, Block bei Bedarf).
@@ -275,7 +276,7 @@ Actions to create and approve pull requests“.
 - Phase 1 ist gebaut: Backend und Oberfläche (Start mit Nachtragen, Verlauf, Session-Übersicht, Übung, Supersatz, Sheet
   „Übung hinzufügen“, Übungskatalog mit Anlegen und Detail).
 - Muskelgruppen sind gebaut: Pflege im Übungsformular (Chips, Antippen wechselt primär → sekundär → aus), Abschnitt
-  „Muskelgruppen“ in der Session-Übersicht, Wochen nur über MCP. Bestehende Übungen haben anfangs keine Gruppen.
+  „Muskelgruppen“ in der Session-Übersicht, Wochen und freie Zeiträume nur über MCP. Bestehende Übungen haben anfangs keine Gruppen.
 - Phase 2 ist gebaut: Satzfelder pro Übung, Programme mit Wochen, Einheiten und Planzeilen, Testwerte, Import aus JSON,
   Training aus dem Plan (Start-Karten, geplante Einheit, Soll und Vorbelegung, Testwert aus dem Testsatz) und der Editor.
   Die Übungsseite hat bewusst eine nachgefüllte „nächster Satz“-Zeile statt mehrerer vorbelegter. Konzept und Entscheidungen

@@ -24,6 +24,15 @@ test("the last block with sets is current, earlier ones with sets are done, the 
   assert.equal(doneCount(b), 1);
 });
 
+test("in an ended session every block with sets is done, none is current", () => {
+  const b = blocks(true, true, false);
+  assert.deepEqual(
+    b.map((_, i) => blockStatus(b, i, true)),
+    ["done", "done", "open"],
+  );
+  assert.equal(doneCount(b, true), 2);
+});
+
 test("overview goes on with the current block, else the first one", () => {
   assert.equal(overviewTarget(blocks(true, true, false))?.id, "b1");
   assert.equal(overviewTarget(blocks(false, false))?.id, "b0");

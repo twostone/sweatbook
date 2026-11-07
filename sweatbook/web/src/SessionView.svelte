@@ -5,7 +5,8 @@
   import { blockLabel, formatSessionDate } from "./logic/format";
   import { cardLine } from "./logic/plan";
   import { blockStatus, doneCount, overviewTarget } from "./logic/flow";
-  import { formatWeightedSets, MUSCLE_LABELS, sessionMuscles } from "./logic/muscles";
+  import { barParts, formatWeightedSets, MUSCLE_LABELS, sessionMuscles } from "./logic/muscles";
+  import MuscleMap from "./MuscleMap.svelte";
   import { goUp, navigate, paths } from "./router.svelte";
   import { changeSession, finishSession, openSheet } from "./store.svelte";
   import type { SessionBlock, SessionTree } from "./types";
@@ -19,6 +20,12 @@
   // Derived here, not taken from the server: sets answer with themselves only and land in this tree.
   const muscles = $derived(sessionMuscles(session.blocks));
   const maxSets = $derived(Math.max(...muscles.muscles.map((m) => m.sets), 1));
+  // The map gives the overview; the list shows the most trained groups and the rest on request.
+  const MUSCLE_PREVIEW = 5;
+  let allMuscles = $state(false);
+  const shownMuscles = $derived(allMuscles ? muscles.muscles : muscles.muscles.slice(0, MUSCLE_PREVIEW));
+  const roleText = (primary: number, secondary: number) =>
+    [primary && `${primary} primär`, secondary && `${secondary} sekundär`].filter(Boolean).join(" · ");
 
   const addExercise = () => openSheet({ kind: "add-exercise", target: { sessionId: session.id, blockId: null, openAfter: false }, query: "" });
 
@@ -120,16 +127,28 @@
       <section class="card muscles" aria-labelledby="muscles-title">
         <h2 id="muscles-title" class="label">Muskelgruppen</h2>
         {#if muscles.muscles.length}
+          <MuscleMap summary={muscles} />
           <ul>
-            {#each muscles.muscles as m (m.muscle)}
+            {#each shownMuscles as m (m.muscle)}
+              {@const bar = barParts(m, maxSets)}
               <li>
                 <span class="muscle-name">{MUSCLE_LABELS[m.muscle]}</span>
-                <span class="muscle-sets">{formatWeightedSets(m.sets)}</span>
-                <span class="muscle-bar" aria-hidden="true"><span style:width="{(m.sets / maxSets) * 100}%"></span></span>
+                <span class="muscle-sets">{formatWeightedSets(m.sets)}<small>{roleText(m.primary_sets, m.secondary_sets)}</small></span>
+                <span class="muscle-bar" aria-hidden="true"
+                  ><span class="bar-primary" style:width="{bar.primary * 100}%"></span><span class="bar-secondary" style:width="{bar.secondary * 100}%"></span></span
+                >
               </li>
             {/each}
           </ul>
-          <p class="muted hint">Primär zählt ein Satz voll, sekundär halb.</p>
+          {#if muscles.muscles.length > MUSCLE_PREVIEW}
+            <button type="button" class="link-btn" aria-expanded={allMuscles} onclick={() => (allMuscles = !allMuscles)}>
+              {allMuscles ? "Weniger zeigen" : `Alle ${muscles.muscles.length} zeigen`}
+            </button>
+          {/if}
+          <p class="muted hint legend">
+            <span><i class="mark bar-primary" aria-hidden="true"></i>primär zählt voll</span>
+            <span><i class="mark bar-secondary" aria-hidden="true"></i>sekundär halb</span>
+          </p>
         {/if}
         {#if muscles.untagged_sets}
           <p class="muted hint">{muscles.untagged_sets} {muscles.untagged_sets === 1 ? "Satz" : "Sätze"} ohne Muskelgruppe</p>
@@ -181,18 +200,39 @@
   .muscle-sets {
     font-variant-numeric: tabular-nums;
     color: var(--muted);
+    text-align: right;
+  }
+  .muscle-sets small {
+    display: block;
+    font-size: 12px;
   }
   .muscle-bar {
     grid-column: 1 / -1;
-    height: 6px;
-    border-radius: 3px;
+    height: 8px;
+    border-radius: 4px;
     background: var(--line);
     overflow: hidden;
+    display: flex;
   }
-  .muscle-bar span {
-    display: block;
-    height: 100%;
-    background: var(--accent-ink);
+  .bar-primary {
+    background: var(--heat-4);
+  }
+  /* Hatched: secondary sets count half, the stripes keep them apart from primary without relying on colour alone. */
+  .bar-secondary {
+    background: repeating-linear-gradient(-45deg, var(--heat-3) 0 3px, var(--heat-2) 3px 6px);
+  }
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 14px;
+  }
+  .mark {
+    display: inline-block;
+    width: 14px;
+    height: 8px;
+    border-radius: 2px;
+    margin-right: 6px;
+    vertical-align: middle;
   }
   .hint {
     margin: 0;

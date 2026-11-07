@@ -76,6 +76,22 @@ export function sessionMuscles(blocks: readonly { exercises: readonly { exercise
   return { muscles: [...counts.values()].filter((c) => c.sets > 0).sort((a, b) => b.sets - a.sets || order(a.muscle) - order(b.muscle)), untagged_sets: untagged };
 }
 
+// Colour steps of the body map (--heat-1 … --heat-4 in app.css); 0 is "not trained". Discrete, because a handful
+// of clearly different shades reads better on small shapes than a smooth gradient.
+export const HEAT_LEVELS = 4;
+
+// Step of a group relative to the most trained group of the session: anything trained gets at least step 1.
+export function heatLevel(sets: number, maxSets: number): number {
+  if (sets <= 0 || maxSets <= 0) return 0;
+  return Math.min(HEAT_LEVELS, Math.max(1, Math.ceil((sets / maxSets) * HEAT_LEVELS)));
+}
+
+// Widths of the two-part bar as fractions of the most trained group: primary sets count full, secondary half.
+export function barParts(count: MuscleCount, maxSets: number): { primary: number; secondary: number } {
+  if (maxSets <= 0) return { primary: 0, secondary: 0 };
+  return { primary: (count.primary_sets * PRIMARY_WEIGHT) / maxSets, secondary: (count.secondary_sets * SECONDARY_WEIGHT) / maxSets };
+}
+
 const setsFormat = new Intl.NumberFormat("de-DE", { maximumFractionDigits: 1 });
 // "4,5 Sätze", "1 Satz"
 export const formatWeightedSets = (sets: number) => `${setsFormat.format(sets)} ${sets === 1 ? "Satz" : "Sätze"}`;

@@ -17,6 +17,13 @@
   --danger: #b3261e;
   --danger-soft: #fbe4e2;
   --scrim: rgb(11 12 14 / 0.45); /* behind sheets */
+  /* Body map (MuscleMap): built from the tokens above, so one definition serves both themes. */
+  --body: color-mix(in srgb, var(--line) 60%, var(--surface)); /* head, hands, knees: no muscle group */
+  --heat-0: var(--line); /* not trained */
+  --heat-1: color-mix(in srgb, var(--accent-ink) 28%, var(--line));
+  --heat-2: color-mix(in srgb, var(--accent-ink) 52%, var(--line));
+  --heat-3: color-mix(in srgb, var(--accent-ink) 76%, var(--line));
+  --heat-4: var(--accent-ink);
   --font: "Barlow", system-ui, sans-serif;
   --display: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
   --radius: 14px;

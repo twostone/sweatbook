@@ -16,7 +16,8 @@
 
   let reordering = $state(false);
   const target = $derived(overviewTarget(session.blocks));
-  const done = $derived(doneCount(session.blocks));
+  const ended = $derived(session.ended_at !== null);
+  const done = $derived(doneCount(session.blocks, ended));
   // Derived here, not taken from the server: sets answer with themselves only and land in this tree.
   const muscles = $derived(sessionMuscles(session.blocks));
   const maxSets = $derived(Math.max(...muscles.muscles.map((m) => m.sets), 1));
@@ -40,7 +41,7 @@
 
   const statusText = { done: "erledigt", current: "läuft", open: "offen" } as const;
   const cardLabel = (block: SessionBlock, i: number) =>
-    `${block.type === "superset" ? "Supersatz " : ""}${blockLabel(block)}, ${statusText[blockStatus(session.blocks, i)]}`;
+    `${block.type === "superset" ? "Supersatz " : ""}${blockLabel(block)}, ${statusText[blockStatus(session.blocks, i, ended)]}`;
 </script>
 
 <div class="page">
@@ -67,7 +68,7 @@
       </div>
       <div class="bar" style:grid-template-columns="repeat({session.blocks.length}, minmax(0, 1fr))" aria-hidden="true">
         {#each session.blocks as _, i (i)}
-          <span class={blockStatus(session.blocks, i)}></span>
+          <span class={blockStatus(session.blocks, i, ended)}></span>
         {/each}
       </div>
     </div>
@@ -78,7 +79,7 @@
       <p class="plan-note muted">{note}</p>
     {/each}
     {#each session.blocks as block, i (block.id)}
-      {@const status = blockStatus(session.blocks, i)}
+      {@const status = blockStatus(session.blocks, i, ended)}
       <div class="card-row">
         <a class="card block {status}" href={paths.block(session.id, block.id)}
           aria-label={cardLabel(block, i)}

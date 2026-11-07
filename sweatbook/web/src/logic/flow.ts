@@ -2,6 +2,7 @@ import type { SessionBlock } from "../types.ts";
 
 // A logged set is done (no ticks before planned sets in phase 2), so a block's state follows from where sets are:
 // the last block with sets is the one being worked on, earlier ones with sets are done, the others are open.
+// Once the session has ended nothing is being worked on any more, so every block with sets is done.
 export type BlockStatus = "done" | "current" | "open";
 
 const hasSets = (block: SessionBlock) => block.exercises.some((e) => e.sets.length > 0);
@@ -10,13 +11,15 @@ function currentIndex(blocks: SessionBlock[]): number {
   return blocks.findLastIndex(hasSets);
 }
 
-export function blockStatus(blocks: SessionBlock[], index: number): BlockStatus {
+export function blockStatus(blocks: SessionBlock[], index: number, ended = false): BlockStatus {
+  if (ended) return hasSets(blocks[index]!) ? "done" : "open";
   const current = currentIndex(blocks);
   if (index === current) return "current";
   return hasSets(blocks[index]!) && index < current ? "done" : "open";
 }
 
-export const doneCount = (blocks: SessionBlock[]) => blocks.filter((_, i) => blockStatus(blocks, i) === "done").length;
+export const doneCount = (blocks: SessionBlock[], ended = false) =>
+  blocks.filter((_, i) => blockStatus(blocks, i, ended) === "done").length;
 
 // "Weiter" on the overview: back to the block being worked on, or the first one when nothing is logged yet.
 export function overviewTarget(blocks: SessionBlock[]): SessionBlock | null {

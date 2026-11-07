@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.13.1](https://github.com/twostone/sweatbook/compare/v1.13.0...v1.13.1) (2026-11-07)
+
+
+### Behoben
+
+* letzte Übung einer beendeten Session als erledigt zeigen ([#56](https://github.com/twostone/sweatbook/issues/56)) ([14ad45c](https://github.com/twostone/sweatbook/commit/14ad45c2af09abd7dce60a5f20c897be4447d107))
+
 ## [1.13.0](https://github.com/twostone/sweatbook/compare/v1.12.0...v1.13.0) (2026-11-07)
 
 

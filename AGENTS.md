@@ -94,6 +94,10 @@ set_log         Satz: weight_kg (null = Körpergewicht), reps, duration_s, dista
   (Faustregel), dazu `untagged_sets` (Sätze von Übungen ohne Gruppe). Je Woche in `trainingSummary`, je Zeitraum in `periodSummary`, je Session
   `sessionMuscles` aus dem Baum (nicht im Baum gespeichert: Sätze antworten nur mit sich selbst, deshalb rechnet der
   Client dieselbe Regel selbst). Aufwärmsätze zählen mit (es gibt kein Aufwärm-Flag).
+  Darstellung in der Session-Übersicht: Körperkarte vorne/hinten (`MuscleMap.svelte`, Formen in `logic/muscle-map.ts` als
+  Eckpunkte der linken Körperhälfte, gespiegelt und per `smoothPath` gerundet; jede Gruppe braucht eine Form, ein Test prüft
+  das), eingefärbt in `HEAT_LEVELS` Stufen relativ zur meisttrainierten Gruppe (`--heat-*` in `app.css`, aus `--accent-ink`
+  gemischt); darunter die fünf stärksten Gruppen (Rest per „Alle zeigen“) mit zweigeteiltem Balken (primär voll, sekundär schraffiert).
 - **Übungen werden archiviert, nicht gelöscht**, sobald sie benutzt sind (`ON DELETE RESTRICT`, API 409). Archivierte
   lassen sich nicht in neue Blöcke aufnehmen (409).
 - **Nur eine offene Session pro Nutzer:** Eine neue Session (oder das Wiederöffnen per `ended_at: null`) beendet die
@@ -286,7 +290,7 @@ Damit bekommt der Release-PR die üblichen Checks; das eingebaute `GITHUB_TOKEN`
 - Phase 1 ist gebaut: Backend und Oberfläche (Start mit Nachtragen, Verlauf, Session-Übersicht, Übung, Supersatz, Sheet
   „Übung hinzufügen“, Übungskatalog mit Anlegen und Detail).
 - Muskelgruppen sind gebaut: Pflege im Übungsformular (Chips, Antippen wechselt primär → sekundär → aus), Abschnitt
-  „Muskelgruppen“ in der Session-Übersicht, Wochen und freie Zeiträume nur über MCP. Bestehende Übungen haben anfangs keine Gruppen.
+  „Muskelgruppen“ (Körperkarte und Liste) in der Session-Übersicht, Wochen und freie Zeiträume nur über MCP. Bestehende Übungen haben anfangs keine Gruppen.
 - Phase 2 ist gebaut: Satzfelder pro Übung, Programme mit Wochen, Einheiten und Planzeilen, Testwerte, Import aus JSON,
   Training aus dem Plan (Start-Karten, geplante Einheit, Soll und Vorbelegung, Testwert aus dem Testsatz) und der Editor.
   Die Übungsseite hat bewusst eine nachgefüllte „nächster Satz“-Zeile statt mehrerer vorbelegter. Konzept und Entscheidungen

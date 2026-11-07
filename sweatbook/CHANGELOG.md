@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.13.0](https://github.com/twostone/sweatbook/compare/v1.12.0...v1.13.0) (2026-11-07)
+
+
+### Neu
+
+* Muskelgruppe schräge Bauchmuskeln für Rotation (Paddeln) ([#53](https://github.com/twostone/sweatbook/issues/53)) ([3f7a0f6](https://github.com/twostone/sweatbook/commit/3f7a0f6c12b0d00b09abac38533e9d7c2e4ed498))
+* **web:** Körperkarte für Muskelgruppen in der Session-Übersicht ([#55](https://github.com/twostone/sweatbook/issues/55)) ([f1ae652](https://github.com/twostone/sweatbook/commit/f1ae652c3d5acd2d4db52b6e628b36c3a98de6fc))
+
 ## [1.12.0](https://github.com/twostone/sweatbook/compare/v1.11.0...v1.12.0) (2026-11-06)
 
 

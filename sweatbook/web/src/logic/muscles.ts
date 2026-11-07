@@ -16,6 +16,7 @@ export const MUSCLE_LABELS: Record<Muscle, string> = {
   triceps: "Trizeps",
   forearms: "Unterarme",
   core: "Bauch/Rumpf",
+  obliques: "Schräge Bauchmuskeln",
   glutes: "Gesäß",
   quads: "Quadrizeps",
   hamstrings: "Beinbeuger",

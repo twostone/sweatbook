@@ -13,6 +13,7 @@ export const MUSCLES = [
   "triceps",
   "forearms",
   "core",
+  "obliques",
   "glutes",
   "quads",
   "hamstrings",

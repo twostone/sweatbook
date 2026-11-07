@@ -88,7 +88,7 @@ set_log         Satz: weight_kg (null = Körpergewicht), reps, duration_s, dista
 - **Namen und Aliase sind global eindeutig**, über Namen und Aliase hinweg, ohne Groß-/Kleinschreibung. Verglichen
   wird in JS (`nameKey` in `data/common.ts`, `toLocaleLowerCase("de")`), weil SQLites `lower()` nur ASCII kennt; die
   Unique-Indizes auf `lower(...)` sind nur ein Rückhalt. Konflikt -> 409 mit `taken_by`.
-- **Muskelgruppen:** feste Liste `MUSCLES` (16 Gruppen, englische Schlüssel) in `data/muscles.ts`, deutsche Labels nur in
+- **Muskelgruppen:** feste Liste `MUSCLES` (17 Gruppen, englische Schlüssel) in `data/muscles.ts`, deutsche Labels nur in
   `web/src/logic/muscles.ts` (ein Test hält beide gleich). Eine Übung hat `muscles: { primary, secondary }`; eine Gruppe in
   beiden Listen = 400, fehlt das Feld beim Ändern, bleibt es. Auswertung = **gewichtete Sätze**: primär 1, sekundär 0,5
   (Faustregel), dazu `untagged_sets` (Sätze von Übungen ohne Gruppe). Je Woche in `trainingSummary`, je Zeitraum in `periodSummary`, je Session

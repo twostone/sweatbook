@@ -109,6 +109,13 @@ test("exercise: muscle groups primary and secondary, kept unless sent, replaced 
   assert.deepEqual((await call("POST", "/api/exercises", pullup)).json.muscles, { primary: [], secondary: [] }, "none by default");
 });
 
+test("exercise: obliques for rotation, ordered after core", async () => {
+  const { call } = setup();
+  const created = await call("POST", "/api/exercises", { ...squat, name: "Landmine Rotation", muscles: { primary: ["obliques", "core"], secondary: [] } });
+  assert.equal(created.status, 201);
+  assert.deepEqual(created.json.muscles, { primary: ["core", "obliques"], secondary: [] });
+});
+
 test("exercise: muscle groups validation, gone with the exercise", async () => {
   const { db, call } = setup();
   const both = await call("POST", "/api/exercises", { ...squat, muscles: { primary: ["quads"], secondary: ["quads"] } });

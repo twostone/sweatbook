@@ -18,6 +18,7 @@ export type Muscle =
   | "triceps"
   | "forearms"
   | "core"
+  | "obliques"
   | "glutes"
   | "quads"
   | "hamstrings"

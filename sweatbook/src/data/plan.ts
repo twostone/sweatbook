@@ -139,10 +139,67 @@ export function plannedOfBlockExercise(ctx: PlanContext, plannedItemId: string |
   return row ? { ...planItem(ctx, row, day), test: testOfSets(ctx.db, blockExerciseId) } : null;
 }
 
-// Where a session comes from: shown as its heading, with the note lines of the planned session on top.
-export type SessionPlan = { planned_session_id: string; program_id: string; program_name: string; week: number; phase: string | null; label: string; notes: string[] };
+// A session counts for its planned session once it has sets. Expects the session as `s`.
+export const WITH_SETS = `EXISTS (SELECT 1 FROM block b JOIN block_exercise be ON be.block_id = b.id JOIN set_log l ON l.block_exercise_id = be.id WHERE b.session_id = s.id)`;
+// The sessions that make the planned session `ps` done: the ones started from it, and the ones of the planned session
+// it was copied from (origin_id, only set for training before the copy). IN ignores a NULL origin.
+export const SESSION_OF_PLANNED = "s.planned_session_id IN (ps.id, ps.origin_id)";
 
-export function planOfSession(db: Db, plannedSessionId: string | null): SessionPlan | null {
+export type PlannedAfterDelete = "open" | "skipped";
+export const COPY_SKIP_NOTE = "vor der Kopie";
+export const DELETED_SKIP_NOTE = "Training gelöscht";
+
+// The planned sessions that are done only because of this session, in programs the user is a member of: its own and
+// the ones copies inherited from it. Deleting the session would open them all again.
+function plannedDoneOnlyBy(db: Db, userId: string, sessionId: string): { own: string | null; inherited: string[] } {
+  const rows = db
+    .prepare(
+      `SELECT ps.id, (ps.id = d.planned_session_id) AS own
+       FROM session d JOIN planned_session ps ON d.planned_session_id IN (ps.id, ps.origin_id)
+         JOIN program_week w ON w.id = ps.week_id
+       WHERE d.id = ? AND d.user_id = ?
+         AND EXISTS (SELECT 1 FROM session s WHERE s.id = d.id AND ${WITH_SETS})
+         AND EXISTS (SELECT 1 FROM program_member m WHERE m.program_id = w.program_id AND m.user_id = d.user_id)
+         AND NOT EXISTS (SELECT 1 FROM session s WHERE s.id <> d.id AND s.user_id = d.user_id AND ${SESSION_OF_PLANNED} AND ${WITH_SETS})`,
+    )
+    .all(sessionId, userId) as { id: string; own: number }[];
+  return { own: rows.find((r) => r.own === 1)?.id ?? null, inherited: rows.filter((r) => r.own !== 1).map((r) => r.id) };
+}
+
+// What deleting the session does to the plan, for the question the client asks: null when no planned session depends
+// on it. Without a choice a planned session opens again as it always did; once copies depend on the session they
+// would propose training from before the copy as the next workout, so then the default is to skip.
+export type PlanDeletion = { default: PlannedAfterDelete; copies: number };
+export function planDeletion(db: Db, userId: string, sessionId: string): PlanDeletion | null {
+  const { own, inherited } = plannedDoneOnlyBy(db, userId, sessionId);
+  if (own === null && inherited.length === 0) return null;
+  return { default: inherited.length > 0 ? "skipped" : "open", copies: inherited.length };
+}
+
+// Called in the transaction that deletes the session, before it goes. One choice for every planned session concerned.
+export function settlePlannedBeforeDelete(db: Db, userId: string, sessionId: string, choice: PlannedAfterDelete | undefined, now: string): void {
+  const { own, inherited } = plannedDoneOnlyBy(db, userId, sessionId);
+  const decided = choice ?? (inherited.length > 0 ? "skipped" : "open");
+  if (decided === "open") return;
+  const skip = db.prepare("INSERT INTO planned_session_skip (planned_session_id, user_id, skipped_at, skip_note) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING");
+  if (own !== null) skip.run(own, userId, now, DELETED_SKIP_NOTE);
+  for (const id of inherited) skip.run(id, userId, now, COPY_SKIP_NOTE);
+}
+
+// Where a session comes from: shown as its heading, with the note lines of the planned session on top.
+// deletion: what deleting the session would do to the plan (filled by the session tree, null = nothing).
+export type SessionPlan = {
+  planned_session_id: string;
+  program_id: string;
+  program_name: string;
+  week: number;
+  phase: string | null;
+  label: string;
+  notes: string[];
+  deletion: PlanDeletion | null;
+};
+
+export function planOfSession(db: Db, userId: string, sessionId: string, plannedSessionId: string | null): SessionPlan | null {
   if (plannedSessionId === null) return null;
   const row = db
     .prepare(
@@ -163,5 +220,6 @@ export function planOfSession(db: Db, plannedSessionId: string | null): SessionP
     phase: row.phase,
     label: row.label,
     notes: notes.map((n) => n.note),
+    deletion: planDeletion(db, userId, sessionId),
   };
 }

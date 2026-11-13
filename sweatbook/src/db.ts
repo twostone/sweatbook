@@ -235,6 +235,12 @@ export const MIGRATIONS: readonly Migration[] = [
   `
   ALTER TABLE program ADD COLUMN copied_from_program_id TEXT REFERENCES program(id) ON DELETE SET NULL;
   `,
+  // v11: a planned session of a copy made from a point on names the planned session whose sessions make it done
+  // (training before the copy is kept, not moved). Always the one the sessions hang on, never a chain.
+  `
+  ALTER TABLE planned_session ADD COLUMN origin_id TEXT REFERENCES planned_session(id) ON DELETE SET NULL;
+  CREATE INDEX planned_session_origin ON planned_session(origin_id);
+  `,
 ];
 
 // exercise_test gets its owner (it was the owner of the exercise); nullable because SQLite cannot add a NOT NULL column

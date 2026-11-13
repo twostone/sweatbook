@@ -12,6 +12,7 @@ import {
   addWeek,
   createProgram,
   duplicateProgram,
+  programOutline,
   deletePhase,
   deletePlanItem,
   deletePlannedSession,
@@ -64,16 +65,16 @@ function failure(err: unknown): Result {
 
 const OK = { ok: true as const };
 const asRange = (value: number | [number, number] | null | undefined) => (typeof value === "number" ? ([value, value] as [number, number]) : value);
-// start_week / start_label of join_program -> the planned session id (the outline of the shared program lists them in order).
+// start_week / start_label of join_program and duplicate_program -> the planned session id, from the program's outline.
 function startSessionId(db: Db, uid: string, a: { program_id: string; start_week?: number; start_label?: string }): string | undefined {
   if (a.start_week === undefined) {
     if (a.start_label !== undefined) throw new InvalidError("start_label needs start_week");
     return undefined;
   }
-  const outline = listPrograms(db, uid).find((p) => p.id === a.program_id)?.outline ?? [];
+  const outline = programOutline(db, uid, a.program_id);
   const week = outline.filter((e) => e.week === a.start_week);
   const found = a.start_label === undefined ? week[0] : week.find((e) => nameKey(e.label) === nameKey(a.start_label!));
-  if (!found) throw new InvalidError(`no planned session found for week ${a.start_week}${a.start_label ? ` ${a.start_label}` : ""}; the outline of list_programs shows what exists`);
+  if (!found) throw new InvalidError(`no planned session found for week ${a.start_week}${a.start_label ? ` ${a.start_label}` : ""}; list_programs (not joined) or get_program shows what exists`);
   return found.id;
 }
 
@@ -263,10 +264,20 @@ export function createMcpServer(db: Db, who: { userId: string; scope: TokenScope
     ({ session_id, ...patch }) => v.sessionView(updateSession(db, uid, session_id, s.sessionPatch.parse(patch))),
     write,
   );
-  tool("delete_session", "Delete a training with all its sets.", { session_id: m.uuid("training") }, m.okView, (a) => {
-    deleteSession(db, uid, a.session_id);
-    return OK;
-  }, destroy);
+  tool(
+    "delete_session",
+    "Delete a training with all its sets. A planned session that was done only by this training is open again, or skipped when copies of the program inherited it; planned_session overrides that.",
+    {
+      session_id: m.uuid("training"),
+      planned_session: s.plannedAfterDelete.optional().describe("What becomes of the planned session(s) done by this training: 'open' (to train again) or 'skipped'. Default: open, or skipped when copies of the program depend on it"),
+    },
+    m.okView,
+    (a) => {
+      deleteSession(db, uid, a.session_id, { planned: a.planned_session });
+      return OK;
+    },
+    destroy,
+  );
 
   // ---- logging ----
   tool(
@@ -343,15 +354,20 @@ export function createMcpServer(db: Db, who: { userId: string; scope: TokenScope
     v.programView(createProgram(db, uid, s.programBody.parse(a))), write);
   tool(
     "duplicate_program",
-    "Copy a program you may read (your own, joined or shared by somebody) into a new private program of yours, to change it without touching the original. The copy has all weeks, planned sessions and lines and starts without progress.",
+    "Copy a program you may read (your own, joined or shared by somebody) into a new private program of yours, to change it without touching the original. The copy has all weeks, planned sessions and lines. Without start_week it starts without progress; with it the copy is a fork: planned sessions before that point are done (your training in the original counts) or skipped, from there on all are open.",
     {
       program_id: m.uuid("program"),
       name: z.string().trim().min(1).max(80).describe("Name of the copy"),
       start_date: m.isoDay.describe("Monday of week 1 of the copy"),
       archive_original: z.boolean().optional().describe("Also archive the original for yourself (only if you joined it), so only the copy stays active"),
+      start_week: z.number().int().min(1).optional().describe("Week number to continue in; what lies before is taken over as done or skipped"),
+      start_label: z.string().trim().min(1).optional().describe("Label of the planned session to continue with, e.g. 'B' (default: the first of start_week); needs start_week"),
     },
     m.programView,
-    (a) => v.programView(duplicateProgram(db, uid, a.program_id, s.duplicateBody.parse({ name: a.name, start_date: a.start_date, archive_source: a.archive_original }))),
+    (a) => {
+      const body = s.duplicateBody.parse({ name: a.name, start_date: a.start_date, archive_source: a.archive_original, start_planned_session_id: startSessionId(db, uid, a) });
+      return v.programView(duplicateProgram(db, uid, a.program_id, body));
+    },
     write,
   );
   tool(

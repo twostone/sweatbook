@@ -1,4 +1,4 @@
-import type { ExerciseTest, PlanItem, PlanPhase, PlanWeek, PlannedSession, Range, SessionExercise, TestKind } from "../types.ts";
+import type { ExerciseTest, OutlineEntry, PlanItem, PlanPhase, PlanWeek, PlannedSession, Range, SessionExercise, TestKind } from "../types.ts";
 import { formatKg, summarize } from "./format.ts";
 import { formatDuration } from "./numbers.ts";
 
@@ -122,6 +122,16 @@ export const PROGRAM_NAME_MAX = 80;
 const COPY_SUFFIX = " (Kopie)";
 // The name a copy starts with: the original's with a suffix, the original shortened when both would be too long.
 export const copyName = (name: string): string => `${name.slice(0, PROGRAM_NAME_MAX - COPY_SUFFIX.length).trimEnd()}${COPY_SUFFIX}`;
+
+// The start a copy proposes. Without an entry point it is a fresh plan from the coming Monday. Forking a program one
+// trains keeps one's start, so every week stays on its days; without a start of one's own the entry week becomes the
+// current one, as when joining.
+export function copyStartDate(source: { joined: boolean; start_date: string | null }, entryWeek: number | null, today = new Date()): string {
+  if (entryWeek === null) return joinStartDate(1, today);
+  return source.joined && source.start_date ? source.start_date : joinStartDate(entryWeek, today);
+}
+// The planned sessions of a program in training order, to pick an entry point from.
+export const outlineOf = (weeks: PlanWeek[]): OutlineEntry[] => weeks.flatMap((w) => w.sessions.map((s) => ({ id: s.id, week: w.number, label: s.label })));
 
 const isoDay = (d: Date): string => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 

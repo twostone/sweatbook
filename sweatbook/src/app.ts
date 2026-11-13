@@ -69,6 +69,7 @@ import {
   tokenBody,
   importBody,
   duplicateBody,
+  sessionDeleteQuery,
 } from "./schemas.ts";
 
 
@@ -181,8 +182,8 @@ export function createApp(db: Db, opts: AppOptions = {}) {
   app.patch("/api/sessions/:id", zValidator("param", idParam), zValidator("json", sessionPatch), (c) =>
     c.json(updateSession(db, c.get("user").id, c.req.valid("param").id, c.req.valid("json"))),
   );
-  app.delete("/api/sessions/:id", zValidator("param", idParam), (c) => {
-    deleteSession(db, c.get("user").id, c.req.valid("param").id);
+  app.delete("/api/sessions/:id", zValidator("param", idParam), zValidator("query", sessionDeleteQuery), (c) => {
+    deleteSession(db, c.get("user").id, c.req.valid("param").id, c.req.valid("query"));
     return c.body(null, 204);
   });
 

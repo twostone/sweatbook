@@ -300,3 +300,31 @@ test("mcp: duplicate_program copies a shared program into a private one and can 
   assert.deepEqual(listed.map((p: any) => [p.name, p.archived]), [["Meins", false], ["Plan", true]]);
   assert.equal((await call(a, "list_programs")).data.programs.length, 1);
 });
+
+test("mcp: duplicate_program with start_week forks a joined program; delete_session takes planned_session", async () => {
+  const { db, anna, call } = setup();
+  const a = createToken(db, anna, { name: "a", scope: "write" }).token;
+  await call(a, "create_exercise", { name: "Kniebeuge", fields: ["weight", "reps"] });
+  let program = (await call(a, "create_program", { name: "Plan", start_date: "2026-11-02" })).data;
+  for (let n = 0; n < 2; n++) {
+    program = (await call(a, "add_week", { program_id: program.id })).data;
+    for (const label of ["A", "B"]) {
+      program = (await call(a, "add_planned_session", { week_id: program.weeks[n].id, label })).data;
+      program = (await call(a, "add_plan_item", { planned_session_id: program.weeks[n].sessions.at(-1).id, exercise: "Kniebeuge", sets: 3, reps: 5, load_kg: 100 })).data;
+    }
+  }
+  const session = (await call(a, "start_planned_session", { planned_session_id: program.weeks[0].sessions[0].id })).data;
+  await call(a, "log_sets", { exercise: "Kniebeuge", sets: [{ weight_kg: 100, reps: 5 }] });
+
+  assert.equal((await call(a, "duplicate_program", { program_id: program.id, name: "Fork", start_date: "2026-11-02", start_week: 3 })).isError, true);
+  assert.equal((await call(a, "duplicate_program", { program_id: program.id, name: "Fork", start_date: "2026-11-02", start_label: "B" })).isError, true);
+  const copy = (await call(a, "duplicate_program", { program_id: program.id, name: "Fork", start_date: "2026-11-02", start_week: 2, start_label: "b" })).data;
+  const states = (p: any) => p.weeks.flatMap((w: any) => w.sessions.map((s: any) => s.state));
+  assert.deepEqual(states(copy), ["done", "skipped", "skipped", "open"]);
+  assert.deepEqual([copy.weeks[0].sessions[0].session_id, copy.weeks[0].sessions[1].skip_note, copy.next.label], [session.id, "vor der Kopie", "B"]);
+
+  assert.equal((await call(a, "delete_session", { session_id: session.id, planned_session: "nope" })).isError, true);
+  assert.deepEqual((await call(a, "delete_session", { session_id: session.id, planned_session: "open" })).data, { ok: true });
+  assert.deepEqual(states((await call(a, "get_program", { program_id: copy.id })).data), ["open", "skipped", "skipped", "open"]);
+  assert.deepEqual(states((await call(a, "get_program", { program_id: program.id })).data), ["open", "open", "open", "open"]);
+});

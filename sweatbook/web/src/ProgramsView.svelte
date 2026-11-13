@@ -123,7 +123,7 @@
               </div>
             </form>
           {:else if copying === p.id}
-            <DuplicateForm source={p} oncopy={(copy) => navigate(paths.program(copy.id))} oncancel={() => (copying = null)} />
+            <DuplicateForm source={p} entries={p.outline ?? []} oncopy={(copy) => navigate(paths.program(copy.id))} oncancel={() => (copying = null)} />
           {:else}
             <div class="pair">
               <button type="button" class="btn" disabled={busy} onclick={() => { joining = null; copying = p.id; }}>Kopieren</button>

@@ -11,6 +11,7 @@ import {
   addPlannedSession,
   addWeek,
   createProgram,
+  duplicateProgram,
   deletePhase,
   deletePlanItem,
   deletePlannedSession,
@@ -340,6 +341,19 @@ export function createMcpServer(db: Db, who: { userId: string; scope: TokenScope
   );
   tool("create_program", "Create an empty program.", { name: z.string().trim().min(1).max(80).describe("Name of the program"), start_date: m.isoDay.describe("Monday of week 1") }, m.programView, (a) =>
     v.programView(createProgram(db, uid, s.programBody.parse(a))), write);
+  tool(
+    "duplicate_program",
+    "Copy a program you may read (your own, joined or shared by somebody) into a new private program of yours, to change it without touching the original. The copy has all weeks, planned sessions and lines and starts without progress.",
+    {
+      program_id: m.uuid("program"),
+      name: z.string().trim().min(1).max(80).describe("Name of the copy"),
+      start_date: m.isoDay.describe("Monday of week 1 of the copy"),
+      archive_original: z.boolean().optional().describe("Also archive the original for yourself (only if you joined it), so only the copy stays active"),
+    },
+    m.programView,
+    (a) => v.programView(duplicateProgram(db, uid, a.program_id, s.duplicateBody.parse({ name: a.name, start_date: a.start_date, archive_source: a.archive_original }))),
+    write,
+  );
   tool(
     "update_program",
     "Rename (owner only), share with all users (owner only), set your own start date or archive a program for yourself.",

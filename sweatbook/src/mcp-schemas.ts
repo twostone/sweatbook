@@ -152,6 +152,10 @@ const programBase = {
   owner_name: maybeText,
   progress: z.object({ done: z.number(), total: z.number() }).describe("Planned sessions done or skipped / all"),
   next: nextWorkout.nullable().describe("The first open planned session"),
+  copied_from: z
+    .object({ id: text, name: text, joined: z.boolean().describe("false = you have not joined it, get_program will not find it") })
+    .nullable()
+    .describe("The program this one was duplicated from, while you may still read it"),
   outline: z
     .array(z.object({ id: text, week: z.number(), label: text }))
     .nullable()

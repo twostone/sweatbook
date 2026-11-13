@@ -58,6 +58,17 @@
 </script>
 
 {#snippet sharedLine(p: ProgramTree)}
+  {#if p.copied_from}
+    {@const source = p.copied_from}
+    <p class="muted summary shared">
+      Kopie von
+      {#if source.joined}
+        <a class="source" href={paths.program(source.id)} onclick={(e) => { e.preventDefault(); navigate(paths.program(source.id)); }}>{source.name}</a>
+      {:else}
+        {source.name}
+      {/if}
+    </p>
+  {/if}
   {#if !p.owned}
     <p class="muted summary shared">
       Geteilt von {p.owner_name ?? "einem anderen Nutzer"} ·
@@ -361,6 +372,15 @@
   .summary {
     margin: 0;
     padding: 0 4px;
+  }
+  .source {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--tap);
+    padding: 0 4px;
+    color: inherit;
+    font-weight: 700;
+    text-decoration: underline;
   }
   .shared {
     display: flex;

@@ -1,12 +1,13 @@
 <script lang="ts">
   import { untrack } from "svelte";
+  import DuplicateForm from "./DuplicateForm.svelte";
   import ExercisePick from "./ExercisePick.svelte";
   import Icon from "./Icon.svelte";
   import * as api from "./api";
   import { emptyForm, formFromItem, hasField, itemBody, moved, type ItemForm, type PlanTarget } from "./logic/plan-edit";
   import { formatKg } from "./logic/format";
-  import { weekDates } from "./logic/plan";
-  import { goUp, paths } from "./router.svelte";
+  import { PROGRAM_NAME_MAX, weekDates } from "./logic/plan";
+  import { goUp, navigate, paths } from "./router.svelte";
   import { closeSheetThen, guard } from "./store.svelte";
   import type { PlanItem, PlannedSession, PlanPhase, PlanWeek, ProgramTree } from "./types";
 
@@ -48,6 +49,7 @@
   // After leaving or deleting the program the page is gone: close a sheet first, then go back to the list.
   const toList = () => closeSheetThen(() => goUp(paths.programs()));
   let confirming = $state(false); // the delete button asks once more
+  let duplicating = $state(false);
   async function run(change: () => Promise<ProgramTree>, after?: () => void) {
     busy = true;
     const ok = await guard(async () => onprogram(await change()));
@@ -123,7 +125,7 @@
 <div class="editor">
   {#if target.kind === "program"}
     <h2 class="label">Programm</h2>
-    <label>Name<input class="field" bind:value={name} maxlength="100" disabled={!program.owned} /></label>
+    <label>Name<input class="field" bind:value={name} maxlength={PROGRAM_NAME_MAX} disabled={!program.owned} /></label>
     <label>Start (Montag von Woche 1)<input class="field" type="date" bind:value={startDate} /></label>
     <button
       type="button"
@@ -135,6 +137,12 @@
     <button type="button" class="btn" disabled={busy} onclick={() => run(() => api.updateProgram(program.id, { archived: !program.archived }))}>
       {program.archived ? "Wiederherstellen" : "Archivieren"}
     </button>
+    {#if duplicating}
+      <!-- The copy is another page: close a sheet first, then open it. -->
+      <DuplicateForm source={program} oncopy={(copy) => closeSheetThen(() => navigate(paths.program(copy.id)))} oncancel={() => (duplicating = false)} />
+    {:else}
+      <button type="button" class="btn" disabled={busy} onclick={() => (duplicating = true)}>Duplizieren</button>
+    {/if}
     {#if program.owned}
       <label class="check">
         <input type="checkbox" checked={program.shared} disabled={busy} onchange={() => run(() => api.updateProgram(program.id, { shared: !program.shared }))} />

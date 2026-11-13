@@ -110,6 +110,7 @@ export const planItemBody = planItemPatch.transform(
 );
 export const day = z.iso.date();
 export const programBody = z.object({ name, start_date: day });
+export const duplicateBody = programBody.extend({ archive_source: z.boolean().optional() });
 export const joinBody = z.object({ start_date: day, start_planned_session_id: id.optional() });
 export const programPatch = z.object({ name: name.optional(), shared: z.boolean().optional(), start_date: day.optional(), archived: z.boolean().optional() });
 export const phase = optionalText(100);

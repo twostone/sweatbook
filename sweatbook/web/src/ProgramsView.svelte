@@ -4,7 +4,8 @@
   import * as api from "./api";
   import { goUp, navigate, paths } from "./router.svelte";
   import { guard } from "./store.svelte";
-  import { joinStartDate } from "./logic/plan";
+  import DuplicateForm from "./DuplicateForm.svelte";
+  import { PROGRAM_NAME_MAX, joinStartDate } from "./logic/plan";
   import type { ProgramSummary } from "./types";
 
   // The programs (plans): progress and the next workout. Opening one shows its weeks.
@@ -12,14 +13,9 @@
   let loaded = $state(false);
 
   // A new empty program: name and the Monday of week 1 (the coming one by default).
-  const nextMonday = () => {
-    const d = new Date();
-    d.setDate(d.getDate() + ((8 - d.getDay()) % 7 || 7));
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  };
   let creating = $state(false);
   let newName = $state("");
-  let newStart = $state(nextMonday());
+  let newStart = $state(joinStartDate(1));
   let busy = $state(false);
   async function create() {
     busy = true;
@@ -45,7 +41,10 @@
   let entryId = $state("");
   let joinStart = $state("");
   const entryWeek = (p: ProgramSummary, id: string) => p.outline?.find((e) => e.id === id)?.week ?? 1;
+  // A shared program can also be copied without joining: a private program to change freely.
+  let copying = $state<string | null>(null);
   function openJoin(p: ProgramSummary) {
+    copying = null;
     joining = p.id;
     entryId = p.outline?.[0]?.id ?? "";
     joinStart = joinStartDate(entryWeek(p, entryId));
@@ -86,7 +85,7 @@
     <h1 class="display page-title">Pläne</h1>
     {#if creating}
       <form class="card create" onsubmit={(e) => { e.preventDefault(); create(); }}>
-        <label>Name<input class="field" bind:value={newName} maxlength="100" required /></label>
+        <label>Name<input class="field" bind:value={newName} maxlength={PROGRAM_NAME_MAX} required /></label>
         <label>Start (Montag von Woche 1)<input class="field" type="date" bind:value={newStart} required /></label>
         <div class="pair">
           <button type="button" class="btn" onclick={() => (creating = false)}>Abbrechen</button>
@@ -123,8 +122,13 @@
                 <button type="submit" class="btn strong" disabled={busy || !joinStart}>Beitreten</button>
               </div>
             </form>
+          {:else if copying === p.id}
+            <DuplicateForm source={p} oncopy={(copy) => navigate(paths.program(copy.id))} oncancel={() => (copying = null)} />
           {:else}
-            <button type="button" class="btn strong" disabled={busy} onclick={() => openJoin(p)}>Hinzufügen</button>
+            <div class="pair">
+              <button type="button" class="btn" disabled={busy} onclick={() => { joining = null; copying = p.id; }}>Kopieren</button>
+              <button type="button" class="btn strong" disabled={busy} onclick={() => openJoin(p)}>Hinzufügen</button>
+            </div>
           {/if}
         </div>
       {/each}

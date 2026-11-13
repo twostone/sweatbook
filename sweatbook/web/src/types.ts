@@ -160,6 +160,8 @@ export type ProgramSummary = {
   total: number;
   next: NextWorkout | null;
   outline: OutlineEntry[] | null; // only while not joined: the planned sessions in order, to pick the entry from
+  // The program it was duplicated from, while one may still read that; joined: it has a page to open.
+  copied_from: { id: string; name: string; joined: boolean } | null;
 };
 export type ProgramTree = ProgramSummary & { phases: PlanPhase[]; weeks: PlanWeek[]; tests: (ExerciseTest & { exercise_name: string })[] };
 export type ImportResult = { program: ProgramTree; new_exercises: string[] };

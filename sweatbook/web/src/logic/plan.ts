@@ -117,6 +117,12 @@ export function formatTest(t: ExerciseTest): string {
   return [weight, ...values].filter(Boolean).join(" × ");
 }
 
+// The server's limit for a program name (`name` in src/schemas.ts).
+export const PROGRAM_NAME_MAX = 80;
+const COPY_SUFFIX = " (Kopie)";
+// The name a copy starts with: the original's with a suffix, the original shortened when both would be too long.
+export const copyName = (name: string): string => `${name.slice(0, PROGRAM_NAME_MAX - COPY_SUFFIX.length).trimEnd()}${COPY_SUFFIX}`;
+
 const isoDay = (d: Date): string => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
 // Start date (Monday of week 1) for joining a program at week N: week 1 starts on the coming Monday, a later entry

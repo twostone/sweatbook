@@ -193,7 +193,7 @@ test("migration v9: a v8 database gets exercise_muscle, one role per group, gone
   migrate(db, MIGRATIONS.slice(0, 8));
   db.prepare("INSERT INTO app_user (id, ha_user_id, created_at) VALUES ('u', 'ha', 'x')").run();
   db.prepare("INSERT INTO exercise (id, user_id, name, has_weight, has_reps, has_distance, has_duration, archived, created_at) VALUES ('e', 'u', 'Bank', 1, 1, 0, 0, 0, 'x')").run();
-  migrate(db);
+  migrate(db, MIGRATIONS.slice(0, 9));
   assert.equal(schemaVersion(db), 9);
   assert.equal(db.prepare("SELECT name FROM exercise WHERE id = 'e'").get()?.name, "Bank");
   const insert = db.prepare("INSERT INTO exercise_muscle (exercise_id, muscle, role) VALUES (?, ?, ?)");
@@ -202,4 +202,21 @@ test("migration v9: a v8 database gets exercise_muscle, one role per group, gone
   assert.throws(() => insert.run("e", "triceps", "main"));
   db.prepare("DELETE FROM exercise WHERE id = 'e'").run();
   assert.equal(db.prepare("SELECT count(*) AS n FROM exercise_muscle").get()?.n, 0);
+});
+
+test("migration v10: a v9 database gets copied_from_program_id, empty and cleared with the source", () => {
+  const db = new DatabaseSync(":memory:");
+  db.exec("PRAGMA foreign_keys = ON");
+  migrate(db, MIGRATIONS.slice(0, 9));
+  db.prepare("INSERT INTO app_user (id, ha_user_id, created_at) VALUES ('u', 'ha', 'x')").run();
+  const insert = "INSERT INTO program (id, user_id, name, start_date, archived, created_at) VALUES (?, 'u', ?, '2026-08-31', 0, 'x')";
+  db.prepare(insert).run("p", "Plan");
+  migrate(db);
+  assert.equal(schemaVersion(db), 10);
+  assert.deepEqual({ ...db.prepare("SELECT name, copied_from_program_id FROM program WHERE id = 'p'").get() }, { name: "Plan", copied_from_program_id: null });
+  db.prepare(insert).run("c", "Kopie");
+  db.prepare("UPDATE program SET copied_from_program_id = 'p' WHERE id = 'c'").run();
+  assert.throws(() => db.prepare("UPDATE program SET copied_from_program_id = 'nope' WHERE id = 'c'").run());
+  db.prepare("DELETE FROM program WHERE id = 'p'").run();
+  assert.equal(db.prepare("SELECT copied_from_program_id FROM program WHERE id = 'c'").get()?.copied_from_program_id, null);
 });

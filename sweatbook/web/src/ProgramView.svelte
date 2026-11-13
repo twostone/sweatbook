@@ -79,6 +79,17 @@
   {/if}
 {/snippet}
 
+{#snippet missingCard(p: ProgramTree)}
+  {#if p.missing_one_rms.length}
+    <div class="card missing">
+      <p class="muted">Ohne 1RM zeigen diese Zeilen nur Prozent:</p>
+      {#each p.missing_one_rms as e (e.id)}
+        <a class="btn" href={paths.exercise(e.id)} onclick={(ev) => { ev.preventDefault(); navigate(paths.exercise(e.id)); }}>{e.name}: 1RM eintragen</a>
+      {/each}
+    </div>
+  {/if}
+{/snippet}
+
 {#snippet testsCard(p: ProgramTree)}
   {#if p.tests.length}
     <h2 class="label phase">Testwerte</h2>
@@ -108,6 +119,7 @@
         <h1 class="display page-title">{program.name}</h1>
         {@render sharedLine(program)}
         <p class="muted summary">{program.done} von {program.total} Einheiten{program.next ? "" : " · abgeschlossen"}</p>
+        {@render missingCard(program)}
         {#each clusters as cluster, c (c)}
           {#if cluster.phase}
             {@const ph = cluster.phase}
@@ -185,6 +197,7 @@
       <p class="muted summary">
         {program.done} von {program.total} Einheiten{program.next ? "" : " · abgeschlossen"}
       </p>
+      {@render missingCard(program)}
       {#each clusters as cluster, c (c)}
         {#if cluster.phase}
           {@const ph = cluster.phase}
@@ -477,6 +490,15 @@
   }
   .grow {
     flex: 1;
+  }
+  .missing {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+  }
+  .missing p {
+    margin: 0;
   }
   .tests {
     padding: 4px 12px;

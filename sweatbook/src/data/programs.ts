@@ -2,7 +2,7 @@ import { isoNow, transaction, type Db } from "../db.ts";
 import { ConflictError, ForbiddenError, InvalidError, nameKey, newId, nextPosition, NotFoundError, tidy, toBool } from "./common.ts";
 import { insertBlock } from "./blocks.ts";
 import { assertUsable, getExercise } from "./exercises.ts";
-import { COPY_SKIP_NOTE, ITEM_COLUMNS, PlanContext, planItem, SESSION_OF_PLANNED, WITH_SETS, type PlanItem, type PlanItemRow, type Range } from "./plan.ts";
+import { COPY_SKIP_NOTE, ITEM_COLUMNS, PlanContext, planItem, SESSION_OF_PLANNED, WITH_SETS, type ExerciseRef, type PlanItem, type PlanItemRow, type Range } from "./plan.ts";
 import { getSession, insertSession, type SessionTree } from "./sessions.ts";
 import { TEST_COLUMNS, type ExerciseTest, type TestKind } from "./tests.ts";
 
@@ -43,7 +43,24 @@ export type ProgramSummary = {
   // The program it was duplicated from, while the user may still read that. joined: they can open it (else it is only listed).
   copied_from: { id: string; name: string; joined: boolean } | null;
 };
-export type ProgramTree = ProgramSummary & { phases: PhaseTree[]; weeks: WeekTree[]; tests: (ExerciseTest & { exercise_name: string })[] };
+// missing_one_rms: reference exercises whose 1RM the user lacks, for percent lines still to train (those show no weight).
+export type ProgramTree = ProgramSummary & {
+  phases: PhaseTree[];
+  weeks: WeekTree[];
+  tests: (ExerciseTest & { exercise_name: string })[];
+  missing_one_rms: ExerciseRef[];
+};
+
+// A percent line without a weight lacks the 1RM of its reference exercise; only planned sessions still open count,
+// since nothing is left to do for the others. One entry per exercise, in plan order.
+export function missingOneRms(weeks: WeekTree[]): ExerciseRef[] {
+  const missing = new Map<string, ExerciseRef>();
+  for (const session of weeks.flatMap((w) => w.sessions)) {
+    if (session.state !== "open") continue;
+    for (const item of session.items) if (item.load_pct !== null && item.weight_kg === null && item.load_ref) missing.set(item.load_ref.id, item.load_ref);
+  }
+  return [...missing.values()];
+}
 
 type ProgramRow = {
   id: string;
@@ -224,7 +241,7 @@ export function getProgram(db: Db, userId: string, id: string): ProgramTree {
        ORDER BY (SELECT MIN(number) FROM program_week w WHERE w.phase_id = ph.id), name`,
     )
     .all(id) as PhaseTree[];
-  return { ...summarize(userId, program, rows), phases, weeks, tests };
+  return { ...summarize(userId, program, rows), phases, weeks, tests, missing_one_rms: missingOneRms(weeks) };
 }
 
 export type ProgramInput = { name: string; start_date: string };

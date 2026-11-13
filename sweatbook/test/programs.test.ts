@@ -700,3 +700,27 @@ test("hand over: deleting the original, a week or a planned session moves inheri
   assert.equal((await call("GET", "/api/sessions")).json.length, 3);
   assert.equal((await ben("GET", "/api/sessions")).json.length, 2);
 });
+
+test("missing 1RM: open percent lines without a weight name their reference exercise, once", async () => {
+  const { call, as } = setup();
+  const { b, h, program, a } = await plan(call);
+  // the owner has a 1RM for Bankziehen: nothing is missing
+  assert.deepEqual(program.missing_one_rms, []);
+  // a second percent line on the same exercise, one on another, and lines that never count
+  await call("POST", `/api/planned-sessions/${a.id}/items`, { exercise_id: b.id, sets: [3, 3], load_pct: 70, load_ref_exercise_id: b.id });
+  await call("POST", `/api/planned-sessions/${a.id}/items`, { exercise_id: h.id, sets: [1, 1], load_pct: 50, load_ref_exercise_id: h.id });
+  assert.deepEqual((await call("GET", `/api/programs/${program.id}`)).json.missing_one_rms.map((e: any) => e.name), ["Dead Hang"]);
+  await call("POST", `/api/exercises/${h.id}/tests`, { kind: "one_rm", tested_on: "2026-09-01", weight_kg: 20 });
+  assert.deepEqual((await call("GET", `/api/programs/${program.id}`)).json.missing_one_rms, []);
+
+  // somebody else has none of his own, and the list shrinks as the percent lines stop mattering
+  await call("PATCH", `/api/programs/${program.id}`, { shared: true });
+  const ben = as("ha-user-2");
+  const joined = (await ben("POST", `/api/programs/${program.id}/join`, { start_date: "2026-11-02" })).json;
+  assert.deepEqual(joined.missing_one_rms.map((e: any) => e.name), ["Bankziehen", "Dead Hang"]);
+  await ben("PATCH", `/api/planned-sessions/${a.id}`, { skipped: true });
+  assert.deepEqual((await ben("GET", `/api/programs/${program.id}`)).json.missing_one_rms, []);
+  await ben("PATCH", `/api/planned-sessions/${a.id}`, { skipped: false });
+  await ben("POST", `/api/exercises/${b.id}/tests`, { kind: "one_rm", tested_on: "2026-10-01", weight_kg: 100 });
+  assert.deepEqual((await ben("GET", `/api/programs/${program.id}`)).json.missing_one_rms.map((e: any) => e.name), ["Dead Hang"]);
+});

@@ -153,6 +153,7 @@ export const programView = (p: ProgramTree): View<typeof schemas.programView> =>
     })),
   })),
   tests: p.tests.map(testView),
+  missing_one_rms: p.missing_one_rms.map((e) => e.name),
 });
 
 export const historyView = (entries: HistoryEntry[]): View<typeof schemas.historyView> => ({

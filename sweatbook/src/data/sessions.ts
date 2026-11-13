@@ -2,7 +2,7 @@ import { isoNow, transaction, type Db } from "../db.ts";
 import { InvalidError, newId, NotFoundError } from "./common.ts";
 import { getExercise, type Field } from "./exercises.ts";
 import type { Muscles } from "./muscles.ts";
-import { plannedOfBlockExercise, planOfSession, PlanContext, type SessionPlan, type SessionPlanned } from "./plan.ts";
+import { plannedOfBlockExercise, planOfSession, PlanContext, settlePlannedBeforeDelete, type PlannedAfterDelete, type SessionPlan, type SessionPlanned } from "./plan.ts";
 import { SET_COLUMNS, toSet, type SetLog } from "./sets.ts";
 
 export type SessionSummary = {
@@ -123,9 +123,13 @@ export function updateSession(db: Db, userId: string, id: string, patch: Session
   return getSession(db, userId, id);
 }
 
-export function deleteSession(db: Db, userId: string, id: string): void {
+// planned: what becomes of the planned sessions that are done only because of this session (see planDeletion).
+export function deleteSession(db: Db, userId: string, id: string, opts: { planned?: PlannedAfterDelete } = {}): void {
   sessionRow(db, userId, id);
-  db.prepare("DELETE FROM session WHERE id = ?").run(id);
+  transaction(db, () => {
+    settlePlannedBeforeDelete(db, userId, id, opts.planned, isoNow());
+    db.prepare("DELETE FROM session WHERE id = ?").run(id);
+  });
 }
 
 function setsOf(db: Db, blockExerciseId: string): SetLog[] {
@@ -188,7 +192,7 @@ export function getSession(db: Db, userId: string, id: string): SessionTree {
       };
     }),
   }));
-  return { ...fields, plan: planOfSession(db, planned_session_id), blocks: tree };
+  return { ...fields, plan: planOfSession(db, userId, id, planned_session_id), blocks: tree };
 }
 
 // The session still running, if any (there is at most one).

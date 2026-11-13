@@ -2,7 +2,7 @@ import { isoNow, transaction, type Db } from "../db.ts";
 import { ConflictError, ForbiddenError, InvalidError, nameKey, newId, nextPosition, NotFoundError, tidy, toBool } from "./common.ts";
 import { insertBlock } from "./blocks.ts";
 import { assertUsable, getExercise } from "./exercises.ts";
-import { ITEM_COLUMNS, PlanContext, planItem, type PlanItem, type PlanItemRow, type Range } from "./plan.ts";
+import { COPY_SKIP_NOTE, ITEM_COLUMNS, PlanContext, planItem, SESSION_OF_PLANNED, WITH_SETS, type PlanItem, type PlanItemRow, type Range } from "./plan.ts";
 import { getSession, insertSession, type SessionTree } from "./sessions.ts";
 import { TEST_COLUMNS, type ExerciseTest, type TestKind } from "./tests.ts";
 
@@ -113,23 +113,24 @@ type SessionRow = {
   skip_note: string | null;
   session_id: string | null;
   done_at: string | null;
+  done_on: string | null; // the planned session the session behind done_at hangs on: this one or its origin
 };
 
-const WITH_SETS = `EXISTS (SELECT 1 FROM block b JOIN block_exercise be ON be.block_id = b.id JOIN set_log l ON l.block_exercise_id = be.id WHERE b.session_id = s.id)`;
-
 // All planned sessions of a program in training order, with what hangs on them: the user's own sessions and skips.
+// A planned session of a copy also counts the sessions of its origin (training from before the copy).
 // done_at: when the first session with sets started (the day whose 1RM counts for the weights).
 function sessionRows(db: Db, userId: string, programId: string): SessionRow[] {
   return db
     .prepare(
       `SELECT ps.id, ps.week_id, w.number AS week, ph.name AS phase, ps.position, ps.label, k.skipped_at, k.skip_note,
-         (SELECT s.id FROM session s WHERE s.planned_session_id = ps.id AND s.user_id = ? ORDER BY s.started_at DESC LIMIT 1) AS session_id,
-         (SELECT s.started_at FROM session s WHERE s.planned_session_id = ps.id AND s.user_id = ? AND ${WITH_SETS} ORDER BY s.started_at LIMIT 1) AS done_at
+         (SELECT s.id FROM session s WHERE ${SESSION_OF_PLANNED} AND s.user_id = ? ORDER BY s.started_at DESC LIMIT 1) AS session_id,
+         (SELECT s.started_at FROM session s WHERE ${SESSION_OF_PLANNED} AND s.user_id = ? AND ${WITH_SETS} ORDER BY s.started_at LIMIT 1) AS done_at,
+         (SELECT s.planned_session_id FROM session s WHERE ${SESSION_OF_PLANNED} AND s.user_id = ? AND ${WITH_SETS} ORDER BY s.started_at LIMIT 1) AS done_on
        FROM planned_session ps JOIN program_week w ON w.id = ps.week_id LEFT JOIN program_phase ph ON ph.id = w.phase_id
          LEFT JOIN planned_session_skip k ON k.planned_session_id = ps.id AND k.user_id = ?
        WHERE w.program_id = ? ORDER BY w.number, ps.position`,
     )
-    .all(userId, userId, userId, programId) as SessionRow[];
+    .all(userId, userId, userId, userId, programId) as SessionRow[];
 }
 
 const stateOf = (row: SessionRow): PlannedSessionState => (row.done_at !== null ? "done" : row.skipped_at !== null ? "skipped" : "open");
@@ -149,10 +150,19 @@ function summarize(userId: string, program: ProgramRow, rows: SessionRow[]): Pro
     done: rows.length - open.length,
     total: rows.length,
     next: first ? { planned_session_id: first.id, week: first.week, phase: first.phase, label: first.label } : null,
-    outline: program.member === null ? rows.map((r) => ({ id: r.id, week: r.week, label: r.label })) : null,
+    outline: program.member === null ? outlineOf(rows) : null,
     copied_from:
       program.source_id !== null && program.source_name !== null ? { id: program.source_id, name: program.source_name, joined: program.source_member !== null } : null,
   };
+}
+
+const outlineOf = (rows: SessionRow[]): OutlineEntry[] => rows.map((r) => ({ id: r.id, week: r.week, label: r.label }));
+
+// The planned sessions in training order of a program one may read (joined or only shared): what an entry point is
+// picked from. An unknown program has none.
+export function programOutline(db: Db, userId: string, id: string): OutlineEntry[] {
+  const found = db.prepare(`SELECT p.id FROM program p WHERE p.id = ? AND ${readable("p")}`).get(id, userId);
+  return found ? outlineOf(sessionRows(db, userId, id)) : [];
 }
 
 // Own and joined programs, active ones first (newest first), then archived ones; then the shared ones not joined yet.
@@ -254,15 +264,41 @@ export function updateProgram(db: Db, userId: string, id: string, patch: Program
   return getProgram(db, userId, id);
 }
 
-export type DuplicateInput = ProgramInput & { archive_source?: boolean };
+export type DuplicateInput = ProgramInput & { archive_source?: boolean; start_planned_session_id?: string };
+
+const insertSkip = (db: Db, plannedSessionId: string, userId: string, now: string, note: string): void => {
+  db.prepare("INSERT INTO planned_session_skip (planned_session_id, user_id, skipped_at, skip_note) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING").run(
+    plannedSessionId,
+    userId,
+    now,
+    note,
+  );
+};
+
+// What the user has behind them when a copy starts at a later planned session (a snapshot of this moment): training
+// stays where it is and is inherited through origin_id, the rest is skipped, with the note of the original if any.
+function inheritProgress(db: Db, userId: string, earlier: SessionRow[], copyIds: Map<string, string>): void {
+  const now = isoNow();
+  for (const row of earlier) {
+    const copyId = copyIds.get(row.id)!;
+    if (row.done_on !== null) db.prepare("UPDATE planned_session SET origin_id = ? WHERE id = ?").run(row.done_on, copyId);
+    else insertSkip(db, copyId, userId, now, row.skip_note ?? COPY_SKIP_NOTE);
+  }
+}
 
 // A private copy of a program one may read, to change without touching the original: phases, weeks, planned sessions
-// and lines, nothing of anybody's progress. Deliberately not ACCESS: reading a shared program needs no membership,
-// and somebody locked out of a program no longer shared gets the same 404 as everybody else.
+// and lines. Deliberately not ACCESS: reading a shared program needs no membership, and somebody locked out of a
+// program no longer shared gets the same 404 as everybody else.
+// Without an entry point the copy starts open. With `start_planned_session_id` (a planned session of the source) it
+// is a fork: what lies before counts as done or skipped for the user, from there on everything is open.
 export function duplicateProgram(db: Db, userId: string, id: string, input: DuplicateInput): ProgramTree {
   const source = db.prepare(`${PROGRAM_SELECT} WHERE p.id = ? AND ${readable("p")}`).get(...who(userId), id, userId) as ProgramRow | undefined;
   if (!source) throw new NotFoundError("program");
+  const rows = sessionRows(db, userId, id);
+  const start = input.start_planned_session_id === undefined ? 0 : rows.findIndex((r) => r.id === input.start_planned_session_id);
+  if (start < 0) throw new InvalidError("start_planned_session_id is not a planned session of this program");
   const copyId = transaction(db, () => {
+    const copyIds = new Map<string, string>();
     const programId = insertProgram(db, userId, input);
     db.prepare("UPDATE program SET copied_from_program_id = ? WHERE id = ?").run(id, programId);
     const phaseIds = new Map<string, string>();
@@ -285,8 +321,9 @@ export function duplicateProgram(db: Db, userId: string, id: string, input: Dupl
         week.phase_id === null ? null : (phaseIds.get(week.phase_id) ?? null),
         week.deload,
       );
-      copySessions(db, week.id, weekId);
+      for (const [from, to] of copySessions(db, week.id, weekId)) copyIds.set(from, to);
     }
+    inheritProgress(db, userId, rows.slice(0, start), copyIds);
     // Archiving is the user's own; without a membership there is nothing to archive.
     if (input.archive_source) db.prepare("UPDATE program_member SET archived = 1 WHERE program_id = ? AND user_id = ?").run(id, userId);
     return programId;
@@ -307,11 +344,8 @@ export function joinProgram(db: Db, userId: string, id: string, startDate: strin
   if (start < 0) throw new InvalidError("start_planned_session_id is not a planned session of this program");
   transaction(db, () => {
     insertMember(db, id, userId, startDate);
-    const skip = db.prepare(
-      "INSERT INTO planned_session_skip (planned_session_id, user_id, skipped_at, skip_note) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING",
-    );
     const now = isoNow();
-    for (const earlier of rows.slice(0, start)) skip.run(earlier.id, userId, now, JOIN_SKIP_NOTE);
+    for (const earlier of rows.slice(0, start)) insertSkip(db, earlier.id, userId, now, JOIN_SKIP_NOTE);
   });
   return getProgram(db, userId, id);
 }
@@ -323,10 +357,48 @@ export function leaveProgram(db: Db, userId: string, id: string): void {
   db.prepare("DELETE FROM program_member WHERE program_id = ? AND user_id = ?").run(id, userId);
 }
 
-// Sessions started from the program stay (everybody's); they only lose the link.
+// Before planned sessions go, in the same transaction: where copies inherited training from them (origin_id), the
+// training moves over so that it survives. A user's sessions go to the oldest inheriting planned session in a program
+// they are a member of; the other inheriting ones of that program's owner follow it there. The link from a set to its
+// plan line is dropped, since the lines of a copy are its own. Sessions nobody inherits only lose their link, as ever.
+function handOverSessions(db: Db, plannedSessionIds: string[]): void {
+  const heirsOf = db.prepare(
+    `SELECT ps.id, p.id AS program_id, p.user_id AS owner FROM planned_session ps JOIN program_week w ON w.id = ps.week_id
+     JOIN program p ON p.id = w.program_id WHERE ps.origin_id = ? ORDER BY p.created_at, p.id`,
+  );
+  const usersOf = db.prepare("SELECT DISTINCT user_id FROM session WHERE planned_session_id = ?");
+  const isMember = db.prepare("SELECT 1 FROM program_member WHERE program_id = ? AND user_id = ?");
+  for (const id of plannedSessionIds) {
+    const heirs = heirsOf.all(id) as { id: string; program_id: string; owner: string }[];
+    if (heirs.length === 0) continue;
+    const successorOf = new Map<string, string>();
+    for (const { user_id } of usersOf.all(id) as { user_id: string }[]) {
+      const heir = heirs.find((h) => isMember.get(h.program_id, user_id) !== undefined);
+      if (!heir) continue;
+      successorOf.set(user_id, heir.id);
+      db.prepare(
+        `UPDATE block_exercise SET planned_item_id = NULL WHERE block_id IN
+           (SELECT b.id FROM block b JOIN session s ON s.id = b.session_id WHERE s.planned_session_id = ? AND s.user_id = ?)`,
+      ).run(id, user_id);
+      db.prepare("UPDATE session SET planned_session_id = ? WHERE planned_session_id = ? AND user_id = ?").run(heir.id, id, user_id);
+    }
+    for (const heir of heirs) {
+      const successor = successorOf.get(heir.owner);
+      if (successor !== undefined && successor !== heir.id) db.prepare("UPDATE planned_session SET origin_id = ? WHERE id = ?").run(successor, heir.id);
+    }
+  }
+}
+
+const plannedSessionsOf = (db: Db, column: "w.program_id" | "ps.week_id", id: string): string[] =>
+  (db.prepare(`SELECT ps.id FROM planned_session ps JOIN program_week w ON w.id = ps.week_id WHERE ${column} = ?`).all(id) as { id: string }[]).map((r) => r.id);
+
+// Sessions started from the program stay (everybody's); they lose the link, or move to a copy that inherited them.
 export function deleteProgram(db: Db, userId: string, id: string): void {
   ownedProgramRow(db, userId, id);
-  db.prepare("DELETE FROM program WHERE id = ?").run(id);
+  transaction(db, () => {
+    handOverSessions(db, plannedSessionsOf(db, "w.program_id", id));
+    db.prepare("DELETE FROM program WHERE id = ?").run(id);
+  });
 }
 
 const nextWeekNumber = (db: Db, programId: string): number =>
@@ -409,13 +481,17 @@ export function addWeek(db: Db, userId: string, programId: string, opts: { phase
   return getProgram(db, userId, programId);
 }
 
-function copySessions(db: Db, fromWeekId: string, toWeekId: string): void {
+// Answers with the pairs [planned session, its copy], in order.
+function copySessions(db: Db, fromWeekId: string, toWeekId: string): [string, string][] {
   const sessions = db.prepare("SELECT id, label FROM planned_session WHERE week_id = ? ORDER BY position").all(fromWeekId) as { id: string; label: string }[];
   const items = db.prepare(`SELECT ${ITEM_COLUMNS} FROM planned_item WHERE planned_session_id = ? ORDER BY position`);
+  const pairs: [string, string][] = [];
   for (const session of sessions) {
     const copyId = insertPlannedSession(db, toWeekId, session.label);
     for (const item of items.all(session.id) as PlanItemRow[]) writeItem(db, copyId, null, rowToInput(item));
+    pairs.push([session.id, copyId]);
   }
+  return pairs;
 }
 
 export function updateWeek(db: Db, userId: string, weekId: string, patch: { phase?: string | null; deload?: boolean }): ProgramTree {
@@ -435,6 +511,7 @@ export function updateWeek(db: Db, userId: string, weekId: string, patch: { phas
 export function deleteWeek(db: Db, userId: string, weekId: string): ProgramTree {
   const programId = ownerOf(db, userId, "week", weekId);
   transaction(db, () => {
+    handOverSessions(db, plannedSessionsOf(db, "ps.week_id", weekId));
     db.prepare("DELETE FROM program_week WHERE id = ?").run(weekId);
     pruneEmptyPhases(db, programId);
   });
@@ -477,7 +554,10 @@ export function updatePlannedSession(
 
 export function deletePlannedSession(db: Db, userId: string, id: string): ProgramTree {
   const programId = ownerOf(db, userId, "planned session", id);
-  db.prepare("DELETE FROM planned_session WHERE id = ?").run(id);
+  transaction(db, () => {
+    handOverSessions(db, [id]);
+    db.prepare("DELETE FROM planned_session WHERE id = ?").run(id);
+  });
   return getProgram(db, userId, programId);
 }
 

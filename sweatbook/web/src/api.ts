@@ -1,5 +1,6 @@
 import type { ItemBody } from "./logic/plan-edit";
 import type {
+  PlannedAfterDelete,
   Exercise,
   ExerciseInput,
   ExercisePatch,
@@ -115,7 +116,9 @@ export const createSession = (s: { title?: string | null; started_at?: string; e
 export const getSession = (id: string) => request<SessionTree>("GET", `api/sessions/${enc(id)}`);
 // ended_at null reopens; fields left out stay.
 export const updateSession = (id: string, p: SessionPatch) => request<SessionTree>("PATCH", `api/sessions/${enc(id)}`, p);
-export const deleteSession = (id: string) => request<void>("DELETE", `api/sessions/${enc(id)}`);
+// planned: what becomes of the planned session(s) done only by this session; without it the server's default applies.
+export const deleteSession = (id: string, planned?: PlannedAfterDelete) =>
+  request<void>("DELETE", `api/sessions/${enc(id)}${planned ? `?planned=${planned}` : ""}`);
 
 // Block changes answer with the whole session.
 export const addBlock = (sessionId: string, exerciseId: string) =>
@@ -152,7 +155,8 @@ export const updateProgram = (id: string, patch: { name?: string; shared?: boole
 export const joinProgram = (id: string, startDate: string, startPlannedSessionId?: string) =>
   request<ProgramTree>("POST", `api/programs/${enc(id)}/join`, { start_date: startDate, start_planned_session_id: startPlannedSessionId });
 // A private copy of a program one may read (joined or only shared); archive_source also archives the original for oneself.
-export const duplicateProgram = (id: string, body: { name: string; start_date: string; archive_source?: boolean }) =>
+// start_planned_session_id makes it a fork: what lies before is taken over as done or skipped.
+export const duplicateProgram = (id: string, body: { name: string; start_date: string; archive_source?: boolean; start_planned_session_id?: string }) =>
   request<ProgramTree>("POST", `api/programs/${enc(id)}/duplicate`, body);
 export const leaveProgram = (id: string) => request<void>("DELETE", `api/programs/${enc(id)}/membership`);
 export const deleteProgram = (id: string) => request<void>("DELETE", `api/programs/${enc(id)}`);

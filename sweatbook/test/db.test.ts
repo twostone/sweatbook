@@ -211,7 +211,7 @@ test("migration v10: a v9 database gets copied_from_program_id, empty and cleare
   db.prepare("INSERT INTO app_user (id, ha_user_id, created_at) VALUES ('u', 'ha', 'x')").run();
   const insert = "INSERT INTO program (id, user_id, name, start_date, archived, created_at) VALUES (?, 'u', ?, '2026-08-31', 0, 'x')";
   db.prepare(insert).run("p", "Plan");
-  migrate(db);
+  migrate(db, MIGRATIONS.slice(0, 10));
   assert.equal(schemaVersion(db), 10);
   assert.deepEqual({ ...db.prepare("SELECT name, copied_from_program_id FROM program WHERE id = 'p'").get() }, { name: "Plan", copied_from_program_id: null });
   db.prepare(insert).run("c", "Kopie");
@@ -219,4 +219,23 @@ test("migration v10: a v9 database gets copied_from_program_id, empty and cleare
   assert.throws(() => db.prepare("UPDATE program SET copied_from_program_id = 'nope' WHERE id = 'c'").run());
   db.prepare("DELETE FROM program WHERE id = 'p'").run();
   assert.equal(db.prepare("SELECT copied_from_program_id FROM program WHERE id = 'c'").get()?.copied_from_program_id, null);
+});
+
+test("migration v11: a v10 database gets origin_id on planned sessions, empty and cleared with the origin", () => {
+  const db = new DatabaseSync(":memory:");
+  db.exec("PRAGMA foreign_keys = ON");
+  migrate(db, MIGRATIONS.slice(0, 10));
+  db.prepare("INSERT INTO app_user (id, ha_user_id, created_at) VALUES ('u', 'ha', 'x')").run();
+  db.prepare("INSERT INTO program (id, user_id, name, start_date, archived, created_at) VALUES ('p', 'u', 'Plan', '2026-08-31', 0, 'x')").run();
+  db.prepare("INSERT INTO program_week (id, program_id, number, deload) VALUES ('w', 'p', 1, 0)").run();
+  const insert = db.prepare("INSERT INTO planned_session (id, week_id, position, label) VALUES (?, 'w', ?, ?)");
+  insert.run("a", 1, "A");
+  migrate(db);
+  assert.equal(schemaVersion(db), 11);
+  assert.deepEqual({ ...db.prepare("SELECT label, origin_id FROM planned_session WHERE id = 'a'").get() }, { label: "A", origin_id: null });
+  insert.run("b", 2, "B");
+  db.prepare("UPDATE planned_session SET origin_id = 'a' WHERE id = 'b'").run();
+  assert.throws(() => db.prepare("UPDATE planned_session SET origin_id = 'nope' WHERE id = 'b'").run());
+  db.prepare("DELETE FROM planned_session WHERE id = 'a'").run();
+  assert.equal(db.prepare("SELECT origin_id FROM planned_session WHERE id = 'b'").get()?.origin_id, null);
 });

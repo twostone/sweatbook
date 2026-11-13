@@ -6,7 +6,7 @@
   import * as api from "./api";
   import { emptyForm, formFromItem, hasField, itemBody, moved, type ItemForm, type PlanTarget } from "./logic/plan-edit";
   import { formatKg } from "./logic/format";
-  import { PROGRAM_NAME_MAX, weekDates } from "./logic/plan";
+  import { PROGRAM_NAME_MAX, outlineOf, weekDates } from "./logic/plan";
   import { goUp, navigate, paths } from "./router.svelte";
   import { closeSheetThen, guard } from "./store.svelte";
   import type { PlanItem, PlannedSession, PlanPhase, PlanWeek, ProgramTree } from "./types";
@@ -139,7 +139,7 @@
     </button>
     {#if duplicating}
       <!-- The copy is another page: close a sheet first, then open it. -->
-      <DuplicateForm source={program} oncopy={(copy) => closeSheetThen(() => navigate(paths.program(copy.id)))} oncancel={() => (duplicating = false)} />
+      <DuplicateForm source={program} entries={outlineOf(program.weeks)} oncopy={(copy) => closeSheetThen(() => navigate(paths.program(copy.id)))} oncancel={() => (duplicating = false)} />
     {:else}
       <button type="button" class="btn" disabled={busy} onclick={() => (duplicating = true)}>Duplizieren</button>
     {/if}

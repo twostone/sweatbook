@@ -167,5 +167,17 @@ export type ProgramTree = ProgramSummary & { phases: PlanPhase[]; weeks: PlanWee
 export type ImportResult = { program: ProgramTree; new_exercises: string[] };
 
 // What a session knows of its plan: where it comes from, and per exercise the target.
-export type SessionPlan = { planned_session_id: string; program_id: string; program_name: string; week: number; phase: string | null; label: string; notes: string[] };
+export type PlannedAfterDelete = "open" | "skipped";
+// deletion: what deleting the session does to the plan (null = no planned session depends on it). copies: how many
+// copies of the program inherited this training. It changes with the sets, so ask the server before using it.
+export type SessionPlan = {
+  planned_session_id: string;
+  program_id: string;
+  program_name: string;
+  week: number;
+  phase: string | null;
+  label: string;
+  notes: string[];
+  deletion: { default: PlannedAfterDelete; copies: number } | null;
+};
 export type SessionPlanned = PlanItem & { test: ExerciseTest | null }; // test: the value this session's sets produced

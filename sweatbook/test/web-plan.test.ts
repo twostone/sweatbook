@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { PROGRAM_NAME_MAX, cardLine, copyName, currentWeek, joinStartDate, findPlanned, formatPlanLine, clusterProgress, formatRange, groupWeeksByPhase, setProgress, weekDates } from "../web/src/logic/plan.ts";
+import { PROGRAM_NAME_MAX, cardLine, copyName, copyStartDate, currentWeek, outlineOf, joinStartDate, findPlanned, formatPlanLine, clusterProgress, formatRange, groupWeeksByPhase, setProgress, weekDates } from "../web/src/logic/plan.ts";
 import type { PlanItem, PlanWeek, SessionExercise } from "../web/src/types.ts";
 
 const item = (over: Partial<PlanItem>): PlanItem => ({
@@ -121,4 +121,19 @@ test("copyName: the original's name with a suffix, never longer than the server 
   assert.equal(long.length, PROGRAM_NAME_MAX);
   assert.ok(long.endsWith("B (Kopie)"));
   assert.equal(copyName(`${"A".repeat(71)} BBBBBBBB`), `${"A".repeat(71)} (Kopie)`); // no blank left before the suffix
+});
+
+test("copyStartDate: a fresh copy starts on the coming Monday, a fork keeps one's start or makes the entry week current", () => {
+  const wednesday = new Date(2026, 9, 28);
+  const mine = { joined: true, start_date: "2026-08-31" };
+  const offered = { joined: false, start_date: null };
+  assert.equal(copyStartDate(mine, null, wednesday), "2026-11-02");
+  assert.equal(copyStartDate(mine, 3, wednesday), "2026-08-31");
+  assert.equal(copyStartDate(offered, 3, wednesday), "2026-10-12");
+  assert.equal(copyStartDate(offered, null, wednesday), "2026-11-02");
+});
+
+test("outlineOf: the planned sessions in training order with their week", () => {
+  const week = (number: number, labels: string[]) => ({ id: `w${number}`, number, phase_id: null, phase: null, deload: false, sessions: labels.map((label) => ({ id: `${number}${label}`, position: 0, label, state: "open" as const, skip_note: null, session_id: null, items: [] })) });
+  assert.deepEqual(outlineOf([week(1, ["A", "B"]), week(2, ["A"])]), [{ id: "1A", week: 1, label: "A" }, { id: "1B", week: 1, label: "B" }, { id: "2A", week: 2, label: "A" }]);
 });

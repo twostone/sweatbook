@@ -517,3 +517,186 @@ test("duplicate: whoever may read a program may copy it, joined or not; everythi
   assert.equal((await ben("POST", `/api/programs/${program.id}/duplicate`, body)).status, 404);
   assert.equal((await call("POST", `/api/programs/${program.id}/duplicate`, body)).status, 201);
 });
+
+// Three weeks with A and B each, one line per planned session; `train` logs a set on a planned session.
+async function longPlan(call: Call) {
+  const b = (await call("GET", "/api/exercises?q=Bankziehen")).json[0] ?? (await call("POST", "/api/exercises", bench)).json;
+  let program = (await call("POST", "/api/programs", { name: "Zyklus", start_date: "2026-08-31" })).json;
+  for (let n = 0; n < 3; n++) {
+    program = (await call("POST", `/api/programs/${program.id}/weeks`, {})).json;
+    for (const label of ["A", "B"]) {
+      program = (await call("POST", `/api/weeks/${program.weeks[n].id}/sessions`, { label })).json;
+      const planned = program.weeks[n].sessions.at(-1);
+      program = (await call("POST", `/api/planned-sessions/${planned.id}/items`, { exercise_id: b.id, sets: [3, 3], reps: [5, 5], load_kg: 80 })).json;
+    }
+  }
+  return program;
+}
+async function train(call: Call, plannedId: string, startedAt: string) {
+  const session = (await call("POST", `/api/planned-sessions/${plannedId}/start`, { started_at: startedAt, ended_at: startedAt })).json;
+  await call("POST", `/api/block-exercises/${session.blocks[0].exercises[0].id}/sets`, { sets: [{ weight_kg: 80, reps: 5 }] });
+  return session;
+}
+const units = (p: any) => p.weeks.flatMap((w: any) => w.sessions);
+const states = (p: any) => units(p).map((s: any) => s.state);
+const fork = async (call: Call, program: any, index: number, name = "Fork") =>
+  (await call("POST", `/api/programs/${program.id}/duplicate`, { name, start_date: "2026-08-31", start_planned_session_id: units(program)[index].id })).json;
+
+test("fork: before the entry point training is inherited and the rest skipped, from there on everything is open", async () => {
+  const { call } = setup();
+  const program = await longPlan(call);
+  const [a1, b1, a2, b2, a3] = units(program);
+  const trained = await train(call, a1.id, "2026-09-01T10:00:00Z");
+  await call("PATCH", `/api/planned-sessions/${b1.id}`, { skipped: true, skip_note: "krank" });
+  await call("PATCH", `/api/planned-sessions/${a2.id}`, { skipped: true });
+  await train(call, a3.id, "2026-09-15T10:00:00Z"); // out of order, after the entry point
+  // b2 stays open in the original
+
+  const copy = (await call("POST", `/api/programs/${program.id}/duplicate`, { name: "Fork", start_date: "2026-08-31", start_planned_session_id: a3.id, archive_source: true })).json;
+  assert.deepEqual(states(copy), ["done", "skipped", "skipped", "skipped", "open", "open"]);
+  assert.deepEqual(units(copy).map((s: any) => s.skip_note), [null, "krank", "vor der Kopie", "vor der Kopie", null, null]);
+  assert.deepEqual(units(copy).map((s: any) => s.session_id), [trained.id, null, null, null, null, null]);
+  assert.deepEqual([copy.done, copy.total, copy.next.week, copy.next.label], [4, 6, 3, "A"]);
+  assert.equal(units(copy).some((s: any) => units(program).some((o: any) => o.id === s.id)), false);
+  // the training stays where it was
+  assert.equal((await call("GET", `/api/sessions/${trained.id}`)).json.plan.program_id, program.id);
+
+  // a snapshot: later training in the original, before and after the point, does not reach the copy
+  await train(call, b2.id, "2026-09-20T10:00:00Z");
+  await train(call, units(program)[5].id, "2026-09-21T10:00:00Z");
+  const original = (await call("GET", `/api/programs/${program.id}`)).json;
+  assert.deepEqual(states(original), ["done", "skipped", "skipped", "done", "done", "done"]);
+  assert.equal(original.archived, true);
+  assert.deepEqual(states((await call("GET", `/api/programs/${copy.id}`)).json), ["done", "skipped", "skipped", "skipped", "open", "open"]);
+
+  // training in the copy is its own
+  await train(call, units(copy)[4].id, "2026-09-22T10:00:00Z");
+  assert.deepEqual(states((await call("GET", `/api/programs/${copy.id}`)).json), ["done", "skipped", "skipped", "skipped", "done", "open"]);
+});
+
+test("fork: the entry point must be a planned session of the source; without training of one's own everything before is skipped", async () => {
+  const { call, as } = setup();
+  const program = await longPlan(call);
+  const other = await longPlan(call);
+  const body = { name: "Fork", start_date: "2026-08-31" };
+  assert.equal((await call("POST", `/api/programs/${program.id}/duplicate`, { ...body, start_planned_session_id: units(other)[2].id })).status, 400);
+  assert.equal((await call("POST", `/api/programs/${program.id}/duplicate`, { ...body, start_planned_session_id: "nope" })).status, 400);
+  assert.equal((await call("GET", "/api/programs")).json.length, 2); // nothing was created
+
+  await train(call, units(program)[0].id, "2026-09-01T10:00:00Z");
+  await call("PATCH", `/api/programs/${program.id}`, { shared: true });
+  const ben = as("ha-user-2");
+  const copy = await fork(ben, program, 2);
+  assert.deepEqual(states(copy), ["skipped", "skipped", "open", "open", "open", "open"]); // the owner's training is not his
+  assert.deepEqual(units(copy).slice(0, 2).map((s: any) => [s.skip_note, s.session_id]), [["vor der Kopie", null], ["vor der Kopie", null]]);
+  // the first planned session as entry point is a plain copy
+  assert.deepEqual(states(await fork(call, program, 0, "Von vorn")), Array(6).fill("open"));
+});
+
+test("fork: a copy of a copy keeps the inherited training", async () => {
+  const { call } = setup();
+  const program = await longPlan(call);
+  const trained = await train(call, units(program)[0].id, "2026-09-01T10:00:00Z");
+  const first = await fork(call, program, 2, "Fork 1");
+  await train(call, units(first)[2].id, "2026-09-08T10:00:00Z");
+  const second = await fork(call, first, 4, "Fork 2");
+  assert.deepEqual(states(second), ["done", "skipped", "done", "skipped", "open", "open"]);
+  assert.equal(units(second)[0].session_id, trained.id);
+  // the middle copy can go: the first inheritance points at the original, the second moves over
+  assert.equal((await call("DELETE", `/api/programs/${first.id}`)).status, 204);
+  assert.deepEqual(states((await call("GET", `/api/programs/${second.id}`)).json), ["done", "skipped", "done", "skipped", "open", "open"]);
+});
+
+test("delete session: the planned session opens again, or is skipped when copies inherited it; the choice overrides", async () => {
+  const { call } = setup();
+  const program = await longPlan(call);
+  const [a1, b1, a2] = units(program);
+  const s1 = await train(call, a1.id, "2026-09-01T10:00:00Z");
+  const s2 = await train(call, b1.id, "2026-09-03T10:00:00Z");
+  const s3 = await train(call, a2.id, "2026-09-08T10:00:00Z");
+  const free = (await call("POST", "/api/sessions", { started_at: "2026-09-09T10:00:00Z", ended_at: "2026-09-09T10:00:00Z" })).json;
+  assert.equal(free.plan, null);
+  // no copy: the question defaults to "open", as deleting always behaved
+  assert.deepEqual(s1.plan.deletion, null); // no sets yet when it was started
+  assert.deepEqual((await call("GET", `/api/sessions/${s1.id}`)).json.plan.deletion, { default: "open", copies: 0 });
+  assert.equal((await call("DELETE", `/api/sessions/${s3.id}?planned=nope`)).status, 400);
+  assert.equal((await call("DELETE", `/api/sessions/${s3.id}`)).status, 204);
+  assert.deepEqual(states((await call("GET", `/api/programs/${program.id}`)).json).slice(0, 3), ["done", "done", "open"]);
+
+  const copy = await fork(call, program, 3);
+  assert.deepEqual(states(copy), ["done", "done", "skipped", "open", "open", "open"]);
+  assert.deepEqual((await call("GET", `/api/sessions/${s1.id}`)).json.plan.deletion, { default: "skipped", copies: 1 });
+
+  // without a choice: skipped everywhere, so the copy does not propose training from before the fork
+  assert.equal((await call("DELETE", `/api/sessions/${s1.id}`)).status, 204);
+  const original = (await call("GET", `/api/programs/${program.id}`)).json;
+  const after = (await call("GET", `/api/programs/${copy.id}`)).json;
+  assert.deepEqual([units(original)[0].state, units(original)[0].skip_note], ["skipped", "Training gelöscht"]);
+  assert.deepEqual([units(after)[0].state, units(after)[0].skip_note, after.next.week, after.next.label], ["skipped", "vor der Kopie", 2, "B"]);
+
+  // "open" asks for training again, in the original and in the copy
+  assert.equal((await call("DELETE", `/api/sessions/${s2.id}?planned=open`)).status, 204);
+  assert.equal(units((await call("GET", `/api/programs/${program.id}`)).json)[1].state, "open");
+  const reopened = (await call("GET", `/api/programs/${copy.id}`)).json;
+  assert.deepEqual([units(reopened)[1].state, reopened.next.week, reopened.next.label], ["open", 1, "B"]);
+});
+
+test("delete session: skipped on request without copies; nothing changes while another session keeps the planned session done", async () => {
+  const { call } = setup();
+  const program = await longPlan(call);
+  const [a1, b1] = units(program);
+  const first = await train(call, a1.id, "2026-09-01T10:00:00Z");
+  const second = await train(call, a1.id, "2026-09-02T10:00:00Z");
+  assert.equal((await call("GET", `/api/sessions/${first.id}`)).json.plan.deletion, null); // the second one keeps it done
+  await call("DELETE", `/api/sessions/${first.id}?planned=skipped`);
+  const kept = units((await call("GET", `/api/programs/${program.id}`)).json)[0];
+  assert.deepEqual([kept.state, kept.skip_note, kept.session_id], ["done", null, second.id]);
+
+  const only = await train(call, b1.id, "2026-09-03T10:00:00Z");
+  await call("DELETE", `/api/sessions/${only.id}?planned=skipped`);
+  const skipped = units((await call("GET", `/api/programs/${program.id}`)).json)[1];
+  assert.deepEqual([skipped.state, skipped.skip_note], ["skipped", "Training gelöscht"]);
+  // a session started from the plan but without sets asks nothing
+  const empty = (await call("POST", `/api/planned-sessions/${units(program)[2].id}/start`, {})).json;
+  assert.equal(empty.plan.deletion, null);
+});
+
+test("hand over: deleting the original, a week or a planned session moves inherited training into the copy", async () => {
+  const { call, as } = setup();
+  const program = await longPlan(call);
+  const [a1, b1, a2] = units(program);
+  const ben = as("ha-user-2");
+  await call("PATCH", `/api/programs/${program.id}`, { shared: true });
+  await ben("POST", `/api/programs/${program.id}/join`, { start_date: "2026-08-31" });
+  const s1 = await train(call, a1.id, "2026-09-01T10:00:00Z");
+  const s2 = await train(call, b1.id, "2026-09-03T10:00:00Z");
+  const s3 = await train(call, a2.id, "2026-09-08T10:00:00Z");
+  const benS1 = await train(ben, a1.id, "2026-09-01T18:00:00Z");
+  const benS3 = await train(ben, a2.id, "2026-09-08T18:00:00Z");
+  const copy = await fork(call, program, 3, "Fork 1");
+  const twin = await fork(call, program, 3, "Fork 2");
+  const benCopy = await fork(ben, program, 2, "Bens Fork"); // A2 is not inherited: his entry point
+  const done3 = ["done", "done", "done", "open", "open", "open"];
+  assert.deepEqual([states(copy), states(twin), states(benCopy)], [done3, done3, ["done", "skipped", "open", "open", "open", "open"]]);
+
+  // one planned session: the training moves to the oldest copy, the other copy follows it there
+  assert.equal((await call("DELETE", `/api/planned-sessions/${a1.id}`)).status, 200);
+  const moved = (await call("GET", `/api/sessions/${s1.id}`)).json;
+  assert.deepEqual([moved.plan.program_id, moved.plan.planned_session_id, moved.blocks[0].exercises[0].planned], [copy.id, units(copy)[0].id, null]);
+  assert.equal(moved.blocks[0].exercises[0].sets.length, 1);
+  assert.equal((await ben("GET", `/api/sessions/${benS1.id}`)).json.plan.program_id, benCopy.id);
+  const read = async (c: Call, p: any) => states((await c("GET", `/api/programs/${p.id}`)).json);
+  assert.deepEqual([await read(call, copy), await read(call, twin), await read(ben, benCopy)], [done3, done3, ["done", "skipped", "open", "open", "open", "open"]]);
+
+  // a week, then the whole program
+  const week2 = (await call("GET", `/api/programs/${program.id}`)).json.weeks[1];
+  assert.equal((await call("DELETE", `/api/weeks/${week2.id}`)).status, 200);
+  assert.equal((await call("GET", `/api/sessions/${s3.id}`)).json.plan.program_id, copy.id);
+  assert.equal((await ben("GET", `/api/sessions/${benS3.id}`)).json.plan, null); // nobody inherited his: only the link goes
+  assert.equal((await call("DELETE", `/api/programs/${program.id}`)).status, 204);
+  assert.equal((await call("GET", `/api/sessions/${s2.id}`)).json.plan.program_id, copy.id);
+  assert.deepEqual([await read(call, copy), await read(call, twin), await read(ben, benCopy)], [done3, done3, ["done", "skipped", "open", "open", "open", "open"]]);
+  // the sessions are all still there
+  assert.equal((await call("GET", "/api/sessions")).json.length, 3);
+  assert.equal((await ben("GET", "/api/sessions")).json.length, 2);
+});

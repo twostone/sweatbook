@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.14.0](https://github.com/twostone/sweatbook/compare/v1.13.1...v1.14.0) (2026-11-13)
+
+
+### Neu
+
+* Plan ab einer Einheit abzweigen ([#60](https://github.com/twostone/sweatbook/issues/60)) ([6973f01](https://github.com/twostone/sweatbook/commit/6973f01fefa1c386b7ebe6f888eeb13b36e449b7))
+* Pläne duplizieren ([#58](https://github.com/twostone/sweatbook/issues/58)) ([be7775e](https://github.com/twostone/sweatbook/commit/be7775ec81221a78154ce8ff4b06ba990fa75703))
+
 ## [1.13.1](https://github.com/twostone/sweatbook/compare/v1.13.0...v1.13.1) (2026-11-07)
 
 

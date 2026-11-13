@@ -151,6 +151,9 @@ export const updateProgram = (id: string, patch: { name?: string; shared?: boole
   request<ProgramTree>("PATCH", `api/programs/${enc(id)}`, patch);
 export const joinProgram = (id: string, startDate: string, startPlannedSessionId?: string) =>
   request<ProgramTree>("POST", `api/programs/${enc(id)}/join`, { start_date: startDate, start_planned_session_id: startPlannedSessionId });
+// A private copy of a program one may read (joined or only shared); archive_source also archives the original for oneself.
+export const duplicateProgram = (id: string, body: { name: string; start_date: string; archive_source?: boolean }) =>
+  request<ProgramTree>("POST", `api/programs/${enc(id)}/duplicate`, body);
 export const leaveProgram = (id: string) => request<void>("DELETE", `api/programs/${enc(id)}/membership`);
 export const deleteProgram = (id: string) => request<void>("DELETE", `api/programs/${enc(id)}`);
 // copyOf: the week to copy (its sessions and lines); without it the week is empty.

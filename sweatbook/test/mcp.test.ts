@@ -101,6 +101,7 @@ test("mcp: a read token sees only read tools, a write token all", async () => {
   const readNames = await names(read);
   const writeNames = await names(write);
   assert.ok(readNames.includes("list_sessions") && !readNames.includes("add_sets"));
+  assert.ok(!readNames.includes("duplicate_program") && writeNames.includes("duplicate_program"));
   assert.ok(writeNames.includes("add_sets") && writeNames.length > readNames.length);
 });
 
@@ -277,4 +278,25 @@ test("mcp: join_program with start_week and start_label skips the earlier planne
   const joined = (await call(b, "join_program", { program_id: program.id, start_date: "2026-10-26", start_week: 2, start_label: "b" })).data;
   assert.deepEqual(joined.weeks.flatMap((w: any) => w.sessions.map((s: any) => s.state)), ["skipped", "skipped", "skipped", "open"]);
   assert.deepEqual([joined.next.week, joined.next.label], [2, "B"]);
+});
+
+test("mcp: duplicate_program copies a shared program into a private one and can archive the original", async () => {
+  const { db, anna, ben, call } = setup();
+  const a = createToken(db, anna, { name: "a", scope: "write" }).token;
+  const b = createToken(db, ben, { name: "b", scope: "write" }).token;
+  await call(a, "create_exercise", { name: "Kniebeuge", fields: ["weight", "reps"] });
+  const program = (await call(a, "create_program", { name: "Plan", start_date: "2026-11-02" })).data;
+  const week = (await call(a, "add_week", { program_id: program.id, phase: "Aufbau" })).data.weeks[0];
+  const plannedId = (await call(a, "add_planned_session", { week_id: week.id, label: "A" })).data.weeks[0].sessions[0].id;
+  await call(a, "add_plan_item", { planned_session_id: plannedId, exercise: "Kniebeuge", sets: 3, reps: 5, load_kg: 100 });
+  assert.equal((await call(b, "duplicate_program", { program_id: program.id, name: "Meins", start_date: "2026-11-09" })).isError, true);
+
+  await call(a, "update_program", { program_id: program.id, shared: true });
+  await call(b, "join_program", { program_id: program.id, start_date: "2026-11-02" });
+  const copy = (await call(b, "duplicate_program", { program_id: program.id, name: "Meins", start_date: "2026-11-09", archive_original: true })).data;
+  assert.deepEqual([copy.name, copy.owned, copy.shared, copy.start_date, copy.copied_from], ["Meins", true, false, "2026-11-09", { id: program.id, name: "Plan", joined: true }]);
+  assert.deepEqual(copy.weeks.map((w: any) => [w.phase, w.sessions.map((s: any) => [s.label, s.state, s.rows[0].text])]), [["Aufbau", [["A", "open", "3×5 @ 100 kg"]]]]);
+  const listed = (await call(b, "list_programs")).data.programs;
+  assert.deepEqual(listed.map((p: any) => [p.name, p.archived]), [["Meins", false], ["Plan", true]]);
+  assert.equal((await call(a, "list_programs")).data.programs.length, 1);
 });

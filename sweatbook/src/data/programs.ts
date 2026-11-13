@@ -40,6 +40,8 @@ export type ProgramSummary = {
   total: number;
   next: NextWorkout | null; // the first open planned session in order
   outline: OutlineEntry[] | null; // only for a program not joined yet
+  // The program it was duplicated from, while the user may still read that. joined: they can open it (else it is only listed).
+  copied_from: { id: string; name: string; joined: boolean } | null;
 };
 export type ProgramTree = ProgramSummary & { phases: PhaseTree[]; weeks: WeekTree[]; tests: (ExerciseTest & { exercise_name: string })[] };
 
@@ -52,19 +54,30 @@ type ProgramRow = {
   user_id: string;
   owner_name: string | null;
   member: string | null; // set when the user has joined (the owner always has)
+  source_id: string | null; // the program it was duplicated from; null too when the user may not read that one
+  source_name: string | null;
+  source_member: string | null;
 };
 
 // Who may work with a program: its owner, and the members of a shared one. Everything else is a 404 (never tell
 // "unknown" and "not yours" apart). Takes the user id twice.
 const ACCESS = `(p.user_id = ? OR (p.shared = 1 AND EXISTS (SELECT 1 FROM program_member m WHERE m.program_id = p.id AND m.user_id = ?)))`;
+// Who may read a program, and so duplicate it: the owner and, while it is shared, everybody (joining needs no more).
+const readable = (alias: string) => `(${alias}.user_id = ? OR ${alias}.shared = 1)`;
 
 // start_date and archived are the user's own, from their membership; the program's own columns are not read any more.
+// The source of a copy is only named while the user may read it (never the name of somebody's private program).
 const PROGRAM_SELECT = `
-  SELECT p.id, p.name, m.start_date, COALESCE(m.archived, 0) AS archived, p.shared, p.user_id, u.display_name AS owner_name, m.user_id AS member
-  FROM program p JOIN app_user u ON u.id = p.user_id LEFT JOIN program_member m ON m.program_id = p.id AND m.user_id = ?`;
+  SELECT p.id, p.name, m.start_date, COALESCE(m.archived, 0) AS archived, p.shared, p.user_id, u.display_name AS owner_name, m.user_id AS member,
+    src.id AS source_id, src.name AS source_name, sm.user_id AS source_member
+  FROM program p JOIN app_user u ON u.id = p.user_id LEFT JOIN program_member m ON m.program_id = p.id AND m.user_id = ?
+    LEFT JOIN program src ON src.id = p.copied_from_program_id AND ${readable("src")}
+    LEFT JOIN program_member sm ON sm.program_id = src.id AND sm.user_id = ?`;
+// PROGRAM_SELECT takes the user id three times (membership, readable source, membership of the source).
+const who = (userId: string): [string, string, string] => [userId, userId, userId];
 
 function programRow(db: Db, userId: string, id: string): ProgramRow {
-  const row = db.prepare(`${PROGRAM_SELECT} WHERE p.id = ? AND ${ACCESS}`).get(userId, id, userId, userId) as ProgramRow | undefined;
+  const row = db.prepare(`${PROGRAM_SELECT} WHERE p.id = ? AND ${ACCESS}`).get(...who(userId), id, userId, userId) as ProgramRow | undefined;
   if (!row) throw new NotFoundError("program");
   return row;
 }
@@ -137,6 +150,8 @@ function summarize(userId: string, program: ProgramRow, rows: SessionRow[]): Pro
     total: rows.length,
     next: first ? { planned_session_id: first.id, week: first.week, phase: first.phase, label: first.label } : null,
     outline: program.member === null ? rows.map((r) => ({ id: r.id, week: r.week, label: r.label })) : null,
+    copied_from:
+      program.source_id !== null && program.source_name !== null ? { id: program.source_id, name: program.source_name, joined: program.source_member !== null } : null,
   };
 }
 
@@ -144,7 +159,7 @@ function summarize(userId: string, program: ProgramRow, rows: SessionRow[]): Pro
 export function listPrograms(db: Db, userId: string): ProgramSummary[] {
   const programs = db
     .prepare(`${PROGRAM_SELECT} WHERE p.user_id = ? OR p.shared = 1 ORDER BY (m.user_id IS NULL), COALESCE(m.archived, 0), p.created_at DESC, p.id`)
-    .all(userId, userId) as ProgramRow[];
+    .all(...who(userId), userId) as ProgramRow[];
   return programs.map((p) => summarize(userId, p, sessionRows(db, userId, p.id)));
 }
 
@@ -239,12 +254,52 @@ export function updateProgram(db: Db, userId: string, id: string, patch: Program
   return getProgram(db, userId, id);
 }
 
+export type DuplicateInput = ProgramInput & { archive_source?: boolean };
+
+// A private copy of a program one may read, to change without touching the original: phases, weeks, planned sessions
+// and lines, nothing of anybody's progress. Deliberately not ACCESS: reading a shared program needs no membership,
+// and somebody locked out of a program no longer shared gets the same 404 as everybody else.
+export function duplicateProgram(db: Db, userId: string, id: string, input: DuplicateInput): ProgramTree {
+  const source = db.prepare(`${PROGRAM_SELECT} WHERE p.id = ? AND ${readable("p")}`).get(...who(userId), id, userId) as ProgramRow | undefined;
+  if (!source) throw new NotFoundError("program");
+  const copyId = transaction(db, () => {
+    const programId = insertProgram(db, userId, input);
+    db.prepare("UPDATE program SET copied_from_program_id = ? WHERE id = ?").run(id, programId);
+    const phaseIds = new Map<string, string>();
+    for (const phase of db.prepare("SELECT id, name, note FROM program_phase WHERE program_id = ?").all(id) as PhaseTree[]) {
+      phaseIds.set(phase.id, newId());
+      db.prepare("INSERT INTO program_phase (id, program_id, name, note) VALUES (?, ?, ?, ?)").run(phaseIds.get(phase.id)!, programId, phase.name, phase.note);
+    }
+    const weeks = db.prepare("SELECT id, number, phase_id, deload FROM program_week WHERE program_id = ? ORDER BY number").all(id) as {
+      id: string;
+      number: number;
+      phase_id: string | null;
+      deload: number;
+    }[];
+    for (const week of weeks) {
+      const weekId = newId();
+      db.prepare("INSERT INTO program_week (id, program_id, number, phase_id, deload) VALUES (?, ?, ?, ?, ?)").run(
+        weekId,
+        programId,
+        week.number,
+        week.phase_id === null ? null : (phaseIds.get(week.phase_id) ?? null),
+        week.deload,
+      );
+      copySessions(db, week.id, weekId);
+    }
+    // Archiving is the user's own; without a membership there is nothing to archive.
+    if (input.archive_source) db.prepare("UPDATE program_member SET archived = 1 WHERE program_id = ? AND user_id = ?").run(id, userId);
+    return programId;
+  });
+  return getProgram(db, userId, copyId);
+}
+
 export const JOIN_SKIP_NOTE = "vor dem Beitritt";
 
 // Take up a program somebody shared, with a start date of one's own. With `startPlannedSessionId` every earlier
 // planned session (training order) counts as skipped for the joiner. Joining again changes nothing.
 export function joinProgram(db: Db, userId: string, id: string, startDate: string, startPlannedSessionId?: string): ProgramTree {
-  const row = db.prepare(`${PROGRAM_SELECT} WHERE p.id = ? AND p.shared = 1`).get(userId, id) as ProgramRow | undefined;
+  const row = db.prepare(`${PROGRAM_SELECT} WHERE p.id = ? AND p.shared = 1`).get(...who(userId), id) as ProgramRow | undefined;
   if (!row) throw new NotFoundError("program");
   if (row.member !== null) return getProgram(db, userId, id);
   const rows = sessionRows(db, userId, id);

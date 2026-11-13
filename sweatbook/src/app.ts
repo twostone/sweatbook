@@ -10,6 +10,7 @@ import {
   addPlannedSession,
   addWeek,
   createProgram,
+  duplicateProgram,
   deletePhase,
   deletePlanItem,
   deletePlannedSession,
@@ -67,6 +68,7 @@ import {
   mePatch,
   tokenBody,
   importBody,
+  duplicateBody,
 } from "./schemas.ts";
 
 
@@ -242,6 +244,9 @@ export function createApp(db: Db, opts: AppOptions = {}) {
     const body = c.req.valid("json");
     return c.json(joinProgram(db, c.get("user").id, c.req.valid("param").id, body.start_date, body.start_planned_session_id));
   });
+  app.post("/api/programs/:id/duplicate", zValidator("param", idParam), zValidator("json", duplicateBody), (c) =>
+    c.json(duplicateProgram(db, c.get("user").id, c.req.valid("param").id, c.req.valid("json")), 201),
+  );
   app.delete("/api/programs/:id/membership", zValidator("param", idParam), (c) => {
     leaveProgram(db, c.get("user").id, c.req.valid("param").id);
     return c.body(null, 204);

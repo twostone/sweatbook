@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { cardLine, currentWeek, joinStartDate, findPlanned, formatPlanLine, clusterProgress, formatRange, groupWeeksByPhase, setProgress, weekDates } from "../web/src/logic/plan.ts";
+import { PROGRAM_NAME_MAX, cardLine, copyName, currentWeek, joinStartDate, findPlanned, formatPlanLine, clusterProgress, formatRange, groupWeeksByPhase, setProgress, weekDates } from "../web/src/logic/plan.ts";
 import type { PlanItem, PlanWeek, SessionExercise } from "../web/src/types.ts";
 
 const item = (over: Partial<PlanItem>): PlanItem => ({
@@ -113,4 +113,12 @@ test("joinStartDate: week 1 starts on the coming Monday, week N makes week N the
   assert.equal(joinStartDate(1, wednesday), "2026-11-02");
   assert.equal(joinStartDate(3, wednesday), "2026-10-12"); // Monday of this week minus 14 days
   assert.equal(joinStartDate(2, new Date(2026, 9, 25)), "2026-10-12"); // a Sunday belongs to the week of Monday the 19th
+});
+
+test("copyName: the original's name with a suffix, never longer than the server takes", () => {
+  assert.equal(copyName("Bankziehen"), "Bankziehen (Kopie)");
+  const long = copyName(`${"A".repeat(70)} ${"B".repeat(9)}`);
+  assert.equal(long.length, PROGRAM_NAME_MAX);
+  assert.ok(long.endsWith("B (Kopie)"));
+  assert.equal(copyName(`${"A".repeat(71)} BBBBBBBB`), `${"A".repeat(71)} (Kopie)`); // no blank left before the suffix
 });

@@ -417,3 +417,103 @@ test("sharing: joining with a start skips the earlier planned sessions for the j
   assert.equal(again.start_date, "2026-10-26");
   assert.equal(again.next.planned_session_id, ids[2]);
 });
+
+// What a copy must take over: phases, weeks and planned sessions with every value of their lines, but none of the ids.
+const content = (p: any) => ({
+  phases: p.phases.map((ph: any) => [ph.name, ph.note]),
+  weeks: p.weeks.map((w: any) => ({
+    number: w.number,
+    phase: w.phase,
+    deload: w.deload,
+    sessions: w.sessions.map((s: any) => ({ label: s.label, items: s.items.map(({ id, ...item }: any) => item) })),
+  })),
+});
+const ids = (p: any) => [p.id, ...p.phases.map((ph: any) => ph.id), ...p.weeks.flatMap((w: any) => [w.id, ...w.sessions.flatMap((s: any) => [s.id, ...s.items.map((i: any) => i.id)])])];
+
+test("duplicate: the copy has every phase, week and line under new ids, starts open and names its source", async () => {
+  const { call } = setup();
+  const { program, a, bSession } = await plan(call);
+  await call("PATCH", `/api/phases/${program.phases[0].id}`, { note: "schwer" });
+  await call("POST", `/api/programs/${program.id}/weeks`, { copy_of: program.weeks[0].id, phase: null, deload: true });
+  // progress in the original: A is done, B skipped
+  const started = (await call("POST", `/api/planned-sessions/${a.id}/start`, {})).json;
+  await call("POST", `/api/block-exercises/${started.blocks[0].exercises[0].id}/sets`, { sets: [{ weight_kg: 95, reps: 3 }] });
+  await call("PATCH", `/api/planned-sessions/${bSession.id}`, { skipped: true });
+  const original = (await call("GET", `/api/programs/${program.id}`)).json;
+  assert.deepEqual(original.weeks[0].sessions.map((s: any) => s.state), ["done", "skipped"]);
+
+  const res = await call("POST", `/api/programs/${program.id}/duplicate`, { name: "Bankziehen II", start_date: "2026-11-16" });
+  assert.equal(res.status, 201);
+  const copy = res.json;
+  assert.deepEqual([copy.name, copy.start_date, copy.owned, copy.joined, copy.shared, copy.archived], ["Bankziehen II", "2026-11-16", true, true, false, false]);
+  assert.deepEqual(copy.copied_from, { id: program.id, name: "Bankziehen", joined: true });
+  assert.equal(original.copied_from, null);
+  assert.deepEqual(content(copy), content(original));
+  assert.deepEqual(content(copy).phases, [["Block 2 – Maximalkraft I", "schwer"]]);
+  assert.deepEqual(copy.weeks.map((w: any) => [w.number, w.phase, w.deload, w.sessions.length]), [[1, "Block 2 – Maximalkraft I", false, 2], [2, null, true, 2]]);
+  assert.equal(ids(copy).some((id) => ids(original).includes(id)), false);
+  // nothing of the progress: every planned session is open, no session hangs on it
+  assert.deepEqual(copy.weeks.flatMap((w: any) => w.sessions.map((s: any) => [s.state, s.session_id, s.skip_note])), Array(4).fill(["open", null, null]));
+  assert.deepEqual([copy.done, copy.total, copy.next.week, copy.next.label], [0, 4, 1, "A"]);
+  assert.deepEqual(copy.tests, original.tests); // test values belong to the user and the exercise, not to the program
+
+  // the original is untouched, and stays so when the copy changes
+  assert.deepEqual((await call("GET", `/api/programs/${program.id}`)).json, original);
+  await call("PATCH", `/api/planned-items/${copy.weeks[0].sessions[0].items[1].id}`, { rest: "5 Min" });
+  await call("POST", `/api/programs/${copy.id}/weeks`, {});
+  await call("PATCH", `/api/phases/${copy.phases[0].id}`, { name: "Umgebaut" });
+  await call("DELETE", `/api/planned-sessions/${copy.weeks[0].sessions[1].id}`);
+  assert.deepEqual((await call("GET", `/api/programs/${program.id}`)).json, original);
+  assert.deepEqual((await call("GET", "/api/programs")).json.map((p: any) => p.name).sort(), ["Bankziehen", "Bankziehen II"]);
+});
+
+test("duplicate: archive_source archives the original for the user only; a deleted original leaves the copy without a source", async () => {
+  const { call, as } = setup();
+  const { program } = await plan(call);
+  const ben = as("ha-user-2");
+  await call("PATCH", `/api/programs/${program.id}`, { shared: true });
+  await ben("POST", `/api/programs/${program.id}/join`, { start_date: "2026-11-02" });
+
+  const copy = (await ben("POST", `/api/programs/${program.id}/duplicate`, { name: "Bens Variante", start_date: "2026-11-09", archive_source: true })).json;
+  assert.deepEqual([copy.owned, copy.shared, copy.copied_from.name], [true, false, "Bankziehen"]);
+  assert.equal((await ben("GET", `/api/programs/${program.id}`)).json.archived, true);
+  assert.equal((await call("GET", `/api/programs/${program.id}`)).json.archived, false);
+  // the owner of the original neither sees the copy nor may read it
+  assert.deepEqual((await call("GET", "/api/programs")).json.map((p: any) => p.name), ["Bankziehen"]);
+  assert.equal((await call("GET", `/api/programs/${copy.id}`)).status, 404);
+  assert.equal((await call("POST", `/api/programs/${copy.id}/duplicate`, { name: "X", start_date: "2026-11-09" })).status, 404);
+
+  // no longer shared: the copy stays, but must not name somebody's private program
+  await call("PATCH", `/api/programs/${program.id}`, { shared: false });
+  assert.equal((await ben("GET", `/api/programs/${copy.id}`)).json.copied_from, null);
+  await call("PATCH", `/api/programs/${program.id}`, { shared: true });
+  assert.equal((await ben("GET", `/api/programs/${copy.id}`)).json.copied_from.id, program.id);
+  assert.equal((await call("DELETE", `/api/programs/${program.id}`)).status, 204);
+  const left = (await ben("GET", `/api/programs/${copy.id}`)).json;
+  assert.deepEqual([left.copied_from, left.weeks[0].sessions[0].items.length], [null, 4]);
+});
+
+test("duplicate: whoever may read a program may copy it, joined or not; everything else is a 404", async () => {
+  const { call, as } = setup();
+  const { program } = await plan(call);
+  const ben = as("ha-user-2");
+  const body = { name: "Kopie", start_date: "2026-11-09" };
+  assert.equal((await ben("POST", `/api/programs/${program.id}/duplicate`, body)).status, 404); // not shared
+  assert.equal((await call("POST", "/api/programs/00000000-0000-4000-8000-000000000000/duplicate", body)).status, 404);
+
+  await call("PATCH", `/api/programs/${program.id}`, { shared: true });
+  // without joining, and archive_source has nothing to archive
+  const copy = (await ben("POST", `/api/programs/${program.id}/duplicate`, { ...body, archive_source: true })).json;
+  assert.deepEqual([copy.owned, copy.joined, copy.weeks[0].sessions[0].items.length], [true, true, 4]);
+  assert.deepEqual(copy.copied_from, { id: program.id, name: "Bankziehen", joined: false }); // listed for him, but no page to open
+  const listed = (await ben("GET", "/api/programs")).json;
+  assert.deepEqual(listed.map((p: any) => [p.name, p.joined, p.archived]), [["Kopie", true, false], ["Bankziehen", false, false]]);
+  assert.equal((await ben("POST", `/api/programs/${program.id}/duplicate`, { name: " ", start_date: "2026-11-09" })).status, 400);
+  assert.equal((await ben("POST", `/api/programs/${program.id}/duplicate`, { name: "K" })).status, 400);
+
+  // a member locked out of a program no longer shared cannot copy it any more
+  await ben("POST", `/api/programs/${program.id}/join`, { start_date: "2026-11-02" });
+  await call("PATCH", `/api/programs/${program.id}`, { shared: false });
+  assert.equal((await ben("POST", `/api/programs/${program.id}/duplicate`, body)).status, 404);
+  assert.equal((await call("POST", `/api/programs/${program.id}/duplicate`, body)).status, 201);
+});

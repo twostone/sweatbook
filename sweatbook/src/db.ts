@@ -231,6 +231,10 @@ export const MIGRATIONS: readonly Migration[] = [
     PRIMARY KEY (exercise_id, muscle)
   ) STRICT;
   `,
+  // v10: a duplicated program remembers where it comes from. Only a hint: it goes when the original is deleted.
+  `
+  ALTER TABLE program ADD COLUMN copied_from_program_id TEXT REFERENCES program(id) ON DELETE SET NULL;
+  `,
 ];
 
 // exercise_test gets its owner (it was the owner of the exercise); nullable because SQLite cannot add a NOT NULL column

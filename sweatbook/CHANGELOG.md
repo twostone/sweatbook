@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.15.0](https://github.com/twostone/sweatbook/compare/v1.14.0...v1.15.0) (2026-11-14)
+
+
+### Neu
+
+* fehlende 1RM im Plan anzeigen ([#61](https://github.com/twostone/sweatbook/issues/61)) ([3476fd8](https://github.com/twostone/sweatbook/commit/3476fd8fbea2935cbbf6a549dee0d20cf4ed6e25))
+
 ## [1.14.0](https://github.com/twostone/sweatbook/compare/v1.13.1...v1.14.0) (2026-11-13)
 
 

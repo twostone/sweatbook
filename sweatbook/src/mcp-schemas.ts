@@ -191,6 +191,9 @@ export const programView = z.object({
     }),
   ),
   tests: z.array(testView),
+  missing_one_rms: z
+    .array(text)
+    .describe("Exercises whose 1RM you have not entered: percent lines of planned sessions still open show no weight for them. Enter one with create_test (kind one_rm)"),
 });
 export const historyView = z.object({
   sessions: z.array(z.object({ session_id: text, title: maybeText, started_at: text, summary: text, sets: z.array(setView) })),

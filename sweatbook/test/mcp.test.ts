@@ -328,3 +328,17 @@ test("mcp: duplicate_program with start_week forks a joined program; delete_sess
   assert.deepEqual(states((await call(a, "get_program", { program_id: copy.id })).data), ["open", "skipped", "skipped", "open"]);
   assert.deepEqual(states((await call(a, "get_program", { program_id: program.id })).data), ["open", "open", "open", "open"]);
 });
+
+test("mcp: get_program names the exercises whose 1RM is missing", async () => {
+  const { db, anna, call } = setup();
+  const a = createToken(db, anna, { name: "a", scope: "write" }).token;
+  await call(a, "create_exercise", { name: "Kniebeuge", fields: ["weight", "reps"] });
+  let program = (await call(a, "create_program", { name: "Plan", start_date: "2026-11-02" })).data;
+  program = (await call(a, "add_week", { program_id: program.id })).data;
+  program = (await call(a, "add_planned_session", { week_id: program.weeks[0].id, label: "A" })).data;
+  const line = { planned_session_id: program.weeks[0].sessions[0].id, exercise: "Kniebeuge", sets: 3, reps: 5, load_pct: 80, load_ref_exercise: "Kniebeuge" };
+  program = (await call(a, "add_plan_item", line)).data;
+  assert.deepEqual(program.missing_one_rms, ["Kniebeuge"]);
+  await call(a, "create_test", { exercise: "Kniebeuge", kind: "one_rm", tested_on: "2026-10-01", weight_kg: 100 });
+  assert.deepEqual((await call(a, "get_program", { program_id: program.id })).data.missing_one_rms, []);
+});

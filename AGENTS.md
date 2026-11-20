@@ -312,4 +312,7 @@ Damit bekommt der Release-PR die üblichen Checks; das eingebaute `GITHUB_TOKEN`
 ## Git und Pull Requests
 
 - Features über einen Pull Request (`feat/<thema>`), PR-Titel als Conventional-Commit-Zeile (deutscher Text), Squash-Merge.
+- **Gestapelte PRs** (`gh stack`, Skill `gh-stack`) nur für Features, die aufeinander aufbauen: Jede Ebene ist ein
+  vollständiges Feature mit Tests und Doku und hat einen eigenen Conventional-Commit-Titel. Ein Feature nie in Ebenen
+  wie Migration, Backend und UI aufteilen.
 - Die CI läuft auf dem PR und muss vor dem Merge grün sein. Kein Force-Push auf `main`.

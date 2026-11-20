@@ -27,6 +27,8 @@ sweatbook/               die App (Docker-Build-Kontext)
     db.ts                  Verbindung, Migrationen, Transaktionen
     data/                  Datenzugriff, ein Modul pro Entität (users, exercises, sessions, blocks, sets, programs, tests, tokens) + plan (Planzeile lesen, Gewicht rechnen) + stats (Auswertungen) + log (Sätze per Übungsname eintragen) + muscles (feste Muskelliste, gewichtete Sätze, ohne SQL) + common
     app.ts, server.ts      API, Ingress-Sperre, Identität, Start
+    static.ts              Frontend aus dist/: index.html mit `no-cache`, `_app/immutable/*` `immutable` (sonst hält
+                           der Browser nach einem Update die alte index.html und lädt nicht mehr)
     schemas.ts             zod-Schemas der Anfragen (von API und MCP geteilt)
     mcp.ts, mcp-http.ts    MCP-Server (Tools, Ressource, Prompts über data/*) und der Endpunkt /mcp mit Token-Prüfung
     mcp-schemas.ts        eigene Ein- und Ausgabe-Schemas der Tools (beschrieben, Übungen per Name); mcp-views.ts: kompakte Sichten und Texte

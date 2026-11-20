@@ -1,5 +1,4 @@
 import { serve } from "@hono/node-server";
-import { serveStatic } from "@hono/node-server/serve-static";
 import { mkdirSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { createApp } from "./app.ts";
@@ -9,6 +8,7 @@ import { parseUrlSettings, readAddonOptions } from "./options.ts";
 import { createHaTokenVerifier } from "./auth/ha-token.ts";
 import { fetchHaExternalUrl } from "./auth/ha-url.ts";
 import { installShutdownHandlers } from "./shutdown.ts";
+import { serveFrontend } from "./static.ts";
 
 // The app's options (Supervisor writes /data/options.json); `log_level` beats LOG_LEVEL, else info.
 const log = logger("server");
@@ -43,7 +43,7 @@ log.info("starting", { version, mcp: mcpEnabled, oauth: !!oauth, log_level: logL
 
 const app = createApp(db, { allowedIp: process.env.INGRESS_ONLY_IP, mcpEnabled, appUrl: appUrl ?? undefined, oauth, version });
 // API routes are registered first; anything else is the built frontend (npm run build).
-app.use("/*", serveStatic({ root: "./dist" }));
+app.use("/*", serveFrontend("./dist"));
 const port = Number(process.env.PORT ?? 8099);
 const server = serve({ fetch: app.fetch, port }, (i) => log.info("listening", { port: i.port }));
 
